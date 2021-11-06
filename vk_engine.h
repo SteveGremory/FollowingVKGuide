@@ -71,4 +71,6 @@ private:
 
 	// Init sync structures
 	void init_sync_structures();
+
+	bool load_shader_module(const char* filepath, VkShaderModule* outshaderModule);
 };

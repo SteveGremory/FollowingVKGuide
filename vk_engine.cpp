@@ -2,6 +2,7 @@
 #include "vk_engine.h"
 
 #include <iostream>
+#include <fstream>
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_vulkan.h>
@@ -368,4 +369,11 @@ void VulkanEngine::init_sync_structures() {
 
     VK_CHECK(vkCreateSemaphore(_device, &semaphoreInfo, nullptr, &_render_semaphore));
     VK_CHECK(vkCreateSemaphore(_device, &semaphoreInfo, nullptr, &_present_semaphore));
+}
+
+bool VulkanEngine::load_shader_module(const char* filepath, VkShaderModule* outshaderModule) {
+    std::ifstream file (filepath, std::ios::ate | std::ios::binary);
+    if (file.is_open()) {
+        return false;
+    }
 }
