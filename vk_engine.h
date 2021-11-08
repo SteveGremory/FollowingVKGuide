@@ -34,6 +34,10 @@ public:
 	VkRenderPass _renderpass; // you need a renderpass to display images from the commandbuffer
 	std::vector<VkFramebuffer> _frameBuffers; // all the framebuffers that need to be rendered to the screen
 
+	// Pipeline
+	VkPipelineLayout _trianglePipelineLayout;
+	VkPipeline _trianglePipeline;
+
 	bool _isInitialized{ false };
 	int _frameNumber {0};
 
@@ -72,5 +76,23 @@ private:
 	// Init sync structures
 	void init_sync_structures();
 
+	// Init vulkan pipelines
+	void init_pipelines();
+
 	bool load_shader_module(const char* filepath, VkShaderModule* outshaderModule);
+};
+
+struct PipelineBuilder {
+	std::vector<VkPipelineShaderStageCreateInfo> _shaderStages;
+	VkPipelineVertexInputStateCreateInfo _vertexInputInfo;
+	VkPipelineInputAssemblyStateCreateInfo _inputAssembly;
+	VkViewport _viewport;
+	VkRect2D _scissor;
+	VkPipelineRasterizationStateCreateInfo _rasterizer;
+	VkPipelineColorBlendAttachmentState _colorBlendAttachment;
+	VkPipelineMultisampleStateCreateInfo _multisampling;
+	VkPipelineLayout _pipelineLayout;
+
+	VkPipeline build_pipeline(VkDevice device, VkRenderPass pass);
+
 };

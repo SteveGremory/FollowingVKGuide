@@ -45,6 +45,7 @@ void VulkanEngine::init()
     init_default_renderpass();
     init_framebuffers();
     init_sync_structures();
+    init_pipelines();
 
     //everything went fine
     _isInitialized = true;
@@ -97,7 +98,10 @@ void VulkanEngine::draw()
     // begin the render pass
     vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
     
-    // record???? wtf??? where???
+    // record???? wtf??? where??? yes now i know, because we didn't have the pipeline back then
+    // now. we. do.
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _trianglePipeline);
+    vkCmdDraw(cmd, 3, 1, 0 , 0);
 
     // finalize and end the render pass
     vkCmdEndRenderPass(cmd);
@@ -373,7 +377,99 @@ void VulkanEngine::init_sync_structures() {
 
 bool VulkanEngine::load_shader_module(const char* filepath, VkShaderModule* outshaderModule) {
     std::ifstream file (filepath, std::ios::ate | std::ios::binary);
-    if (file.is_open()) {
+    if (!file.is_open()) {
         return false;
     }
+
+    // Find what the size of the file is by telling where the cursor is
+    // as we used std::ios::ate, the cursor will be at the end of the file
+    size_t fileSize = (size_t) file.tellg();
+    std::vector<uint32_t> buffer(fileSize / sizeof(uint32_t));
+
+    // put the cursor back at the start of the file
+    // as now we need to read it
+    file.seekg(0);
+
+    // Read them bytes
+    file.read((char*)buffer.data(), fileSize);
+
+    file.close();
+
+    VkShaderModuleCreateInfo shader_module_info {};
+    shader_module_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    shader_module_info.pNext = nullptr;
+
+    // Supply vulkan with information about the file
+    shader_module_info.codeSize = buffer.size() * sizeof(uint32_t);
+    shader_module_info.pCode = buffer.data();
+
+    VkShaderModule shaderModule;
+    if (vkCreateShaderModule(_device, &shader_module_info, nullptr, &shaderModule) != VK_SUCCESS) {
+        return false;
+    }
+
+    *outshaderModule = shaderModule;
+    return true;
+}
+
+void VulkanEngine::init_pipelines() {
+    VkShaderModule triangleFragShader;
+    if (!load_shader_module("../shaders/triangle.frag.spv", &triangleFragShader))
+    { std::cout << "Failed to create fragment shader." << std::endl; } else
+    { std::cout << "Successfully created fragment shader." << std::endl; }
+
+    VkShaderModule triangleVertShader;
+    if (!load_shader_module("../shaders/triangle.vert.spv", &triangleVertShader))
+    { std::cout << "Failed to create vertex shader." << std::endl; } else
+    { std::cout << "Successfully created vertex shader." << std::endl; }
+
+    // not using any desc. sets or anything so it's good for now.
+    VkPipelineLayoutCreateInfo pipeline_layout_info = vkinit::pipeline_layout_create_info();
+
+    VK_CHECK(vkCreatePipelineLayout(_device, &pipeline_layout_info, nullptr, &_trianglePipelineLayout));
+
+    PipelineBuilder pipelineBuilder;
+
+    // Create infos for vertex and fragment shader
+    pipelineBuilder._shaderStages.push_back(
+        vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_VERTEX_BIT, triangleVertShader));
+
+    pipelineBuilder._shaderStages.push_back(
+        vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_FRAGMENT_BIT, triangleFragShader));
+
+    // tells vulkan how to read vertices, isn't in use rn.
+    pipelineBuilder._vertexInputInfo = vkinit::vertex_input_stage_create_info();
+
+    // set polygon mode:
+        // VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST : normal triangle drawing
+        // VK_PRIMITIVE_TOPOLOGY_POINT_LIST    : points
+        // VK_PRIMITIVE_TOPOLOGY_LINE_LIST     : line-list
+    pipelineBuilder._inputAssembly = vkinit::input_assembly_create_info(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+
+    //build viewport and scissor from the swapchain extents
+    pipelineBuilder._viewport.x = 0.0f;
+    pipelineBuilder._viewport.y = 0.0f;
+    pipelineBuilder._viewport.width = (float)_windowExtent.width;
+    pipelineBuilder._viewport.height = (float)_windowExtent.height;
+    pipelineBuilder._viewport.minDepth = 0.0f;
+    pipelineBuilder._viewport.maxDepth = 1.0f;
+
+    pipelineBuilder._scissor.offset = { 0, 0 };
+    pipelineBuilder._scissor.extent = _windowExtent;
+
+    // Tell the rasterizer that we wanna fill the objects
+    pipelineBuilder._rasterizer = vkinit::rasterization_state_create_info(VK_POLYGON_MODE_FILL);
+
+    // MSAA
+    pipelineBuilder._multisampling = vkinit::multisampling_state_create_info();
+
+    // color blending
+    pipelineBuilder._colorBlendAttachment = vkinit::color_blend_attachment_state();
+
+    // pipeline layout
+    pipelineBuilder._pipelineLayout = _trianglePipelineLayout;
+
+    // finally.
+    _trianglePipeline = pipelineBuilder.build_pipeline(_device, _renderpass);
+
 }
