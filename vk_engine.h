@@ -5,6 +5,24 @@
 
 #include <vk_types.h>
 #include <vector>
+#include <deque>
+#include <functional>
+
+struct DeletionQueue {
+	std::deque<std::function<void()>> deletors;
+	
+	void push_function(std::function<void()>&& function) {
+		deletors.push_back(function);
+	};
+
+	void flush() {
+		for (auto it = deletors.rbegin(); it != deletors.rend(); it++) {
+			(*it)(); // call the function???? bro c++ moment
+		}
+		deletors.clear();
+	}
+
+};
 
 class VulkanEngine {
 public:
@@ -37,9 +55,15 @@ public:
 	// Pipeline
 	VkPipelineLayout _trianglePipelineLayout;
 	VkPipeline _trianglePipeline;
+	VkPipeline _redTrianglePipeline;
+
+	// Deletion queue so that Vulkan Validation layers stop crying
+	DeletionQueue _mainDeletionQueue; // jk it's so that every acquired resource is freed
 
 	bool _isInitialized{ false };
 	int _frameNumber {0};
+	int _selectedShader {0};
+
 
 	VkExtent2D _windowExtent{ 1700 , 900 };
 
@@ -96,3 +120,4 @@ struct PipelineBuilder {
 	VkPipeline build_pipeline(VkDevice device, VkRenderPass pass);
 
 };
+
