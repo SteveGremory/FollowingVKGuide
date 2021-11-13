@@ -7,6 +7,14 @@
 #include <vector>
 #include <deque>
 #include <functional>
+#include <vk_mesh.h>
+#include <glm/glm.hpp>
+#include "vk_mem_alloc.h"
+
+struct MeshPushConstants {
+	glm::vec4 data;
+	glm::mat4 render_matrix;
+};
 
 struct DeletionQueue {
 	std::deque<std::function<void()>> deletors;
@@ -60,6 +68,16 @@ public:
 	// Deletion queue so that Vulkan Validation layers stop crying
 	DeletionQueue _mainDeletionQueue; // jk it's so that every acquired resource is freed
 
+	// VulkanMemoryAllocator
+	VmaAllocator _allocator;
+
+	// Push Constants m8
+	VkPipelineLayout _meshPipelineLayout;
+
+	// suzanne moment
+	VkPipeline _meshPipeline;
+	Mesh _triangleMesh;
+
 	bool _isInitialized{ false };
 	int _frameNumber {0};
 	int _selectedShader {0};
@@ -103,7 +121,14 @@ private:
 	// Init vulkan pipelines
 	void init_pipelines();
 
+	// load the shader module from the filepath
 	bool load_shader_module(const char* filepath, VkShaderModule* outshaderModule);
+	
+	// get them models
+	void load_meshes();
+
+	// upload the meshes to the pipeline
+	void upload_mesh(Mesh& mesh);
 };
 
 struct PipelineBuilder {

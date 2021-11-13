@@ -7,10 +7,16 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_vulkan.h>
 
+#include <glm/glm.hpp>
+#include <glm/gtx/transform.hpp>
+
 #include <vk_types.h>
 #include <vk_initializers.h>
 
 #include "VkBootstrap.h"
+
+#define VMA_IMPLEMENTATION
+#include "vk_mem_alloc.h"
 
 #define VK_CHECK(x)                                                     \
     do                                                                  \
@@ -46,6 +52,7 @@ void VulkanEngine::init()
     init_framebuffers();
     init_sync_structures();
     init_pipelines();
+    load_meshes();
 
     //everything went fine
     _isInitialized = true;
@@ -100,13 +107,41 @@ void VulkanEngine::draw()
     
     // record???? wtf??? where??? yes now i know, because we didn't have the pipeline back then
     // now. we. do.
-    if(_selectedShader == 0) {
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _trianglePipeline);
-    } else {
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _redTrianglePipeline);
-    }
+   
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _meshPipeline);
 
-    vkCmdDraw(cmd, 3, 1, 0 , 0);
+    //bind the mesh vertex buffer with offset 0
+    VkDeviceSize offset = 0;
+    vkCmdBindVertexBuffers(cmd, 0, 1, &_triangleMesh._vertexBuffer._buffer, &offset);
+ //make a model view matrix for rendering the object
+    //camera position
+    glm::vec3 camPos = { 0.f,0.f,-2.f };
+
+    glm::mat4 view = glm::translate(glm::mat4(1.f), camPos);
+    //camera projection
+    glm::mat4 projection = glm::perspective(glm::radians(70.f), 1700.f / 900.f, 0.1f, 200.0f);
+    projection[1][1] *= -1;
+    //model rotation
+    glm::mat4 model = glm::rotate(glm::mat4{ 1.0f }, glm::radians(_frameNumber * 0.4f), glm::vec3(0, 1, 0));
+
+    //calculate final mesh matrix
+    glm::mat4 mesh_matrix = projection * view * model;
+
+    MeshPushConstants constants;
+    constants.render_matrix = mesh_matrix;
+
+    //upload the matrix to the GPU via push constants
+    vkCmdPushConstants(cmd, _meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants), &constants);
+
+    //we can now draw the mesh
+    vkCmdDraw(cmd, _triangleMesh._vertices.size(), 1, 0, 0);
+
+    //if(_selectedShader == 0) {
+    //    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _trianglePipeline);
+    //} else {
+    //    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _redTrianglePipeline);
+    //}
+    //vkCmdDraw(cmd, 3, 1, 0 , 0);
 
     // finalize and end the render pass
     vkCmdEndRenderPass(cmd);
@@ -217,6 +252,13 @@ void VulkanEngine::init_vulkan() {
     // get the graphics queue from VkBootstrap
     _graphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
     _graphicsQueueFamily = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
+
+    // init vulkanmemoryallocator
+    VmaAllocatorCreateInfo allocatorInfo {};
+    allocatorInfo.device = _device;
+    allocatorInfo.physicalDevice = _chosen_GPU;
+    allocatorInfo.instance = _instance;
+    vmaCreateAllocator(&allocatorInfo, &_allocator);
 }
 
 void VulkanEngine::init_swapchain() {
@@ -440,7 +482,8 @@ bool VulkanEngine::load_shader_module(const char* filepath, VkShaderModule* outs
 void VulkanEngine::init_pipelines() {
     VkShaderModule 
         triangleFragShader, redTriangleFragShader, 
-        triangleVertShader, redTriangleVertShader;
+        triangleVertShader, redTriangleVertShader,
+        meshVertShader;
     
     if (!load_shader_module("../shaders/compiled/triangle_colored.frag.spv", &triangleFragShader))
     { std::cout << "Failed to create fragment shader." << std::endl; } else
@@ -460,6 +503,10 @@ void VulkanEngine::init_pipelines() {
     { std::cout << "Failed to create Red vertex shader." << std::endl; } else
     { std::cout << "Successfully created vertex shader." << std::endl; }
 
+    if(!load_shader_module("../shaders/compiled/tri_mesh.vert.spv", &meshVertShader))
+    { std::cout << "Failed to create Mesh fragment shader." << std::endl; } else
+    { std::cout << "Successfully created fragment shader." << std::endl; }
+    
     // not using any desc. sets or anything so it's good for now.
     VkPipelineLayoutCreateInfo pipeline_layout_info = vkinit::pipeline_layout_create_info();
 
@@ -522,18 +569,104 @@ void VulkanEngine::init_pipelines() {
     //build the red triangle pipeline
     _redTrianglePipeline = pipelineBuilder.build_pipeline(_device, _renderpass);
 
+    VertexInputDescription vertexDescription = Vertex::get_vertex_input_desc();
+
+    // connect the pipeline builder vertex input info to the one we get from Vertex
+    pipelineBuilder._vertexInputInfo.pVertexAttributeDescriptions = vertexDescription.attributes.data();
+    pipelineBuilder._vertexInputInfo.vertexAttributeDescriptionCount = vertexDescription.attributes.size();
+
+    pipelineBuilder._vertexInputInfo.pVertexBindingDescriptions = vertexDescription.bindings.data();
+    pipelineBuilder._vertexInputInfo.vertexBindingDescriptionCount = vertexDescription.bindings.size();
+
+    // remove the old shaders and make way for the new ones. Liberal moment.
+    pipelineBuilder._shaderStages.clear();
+
+    // start with a default, empty layout info
+    VkPipelineLayoutCreateInfo mesh_pipeline_layout_info = vkinit::pipeline_layout_create_info();
+
+    VkPushConstantRange pushConstantRange {};
+    pushConstantRange.offset = 0; // first member in struct
+    pushConstantRange.size = sizeof(MeshPushConstants);
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT; // because the mesh shader is a vertex shader
+
+    mesh_pipeline_layout_info.pPushConstantRanges = &pushConstantRange;
+    mesh_pipeline_layout_info.pushConstantRangeCount = 1;
+
+    VK_CHECK(vkCreatePipelineLayout(_device, &mesh_pipeline_layout_info, nullptr, &_meshPipelineLayout));
+
+    // add the other shaders
+    pipelineBuilder._shaderStages.push_back(
+        vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_VERTEX_BIT, meshVertShader));
+
+    // make sure that triangleFragShader is holding the compiled colored_triangle.frag
+    pipelineBuilder._shaderStages.push_back(
+        vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_FRAGMENT_BIT, triangleFragShader));
+
+    pipelineBuilder._pipelineLayout = _meshPipelineLayout;
+    _meshPipeline = pipelineBuilder.build_pipeline(_device, _renderpass);
+
     //destroy all shader modules, outside of the queue
+    vkDestroyShaderModule(_device, meshVertShader, nullptr);
     vkDestroyShaderModule(_device, redTriangleVertShader, nullptr);
     vkDestroyShaderModule(_device, redTriangleFragShader, nullptr);
     vkDestroyShaderModule(_device, triangleFragShader, nullptr);
     vkDestroyShaderModule(_device, triangleVertShader, nullptr);
 
+    
+
     _mainDeletionQueue.push_function([=]() {
         //destroy the 2 pipelines we have created
         vkDestroyPipeline(_device, _redTrianglePipeline, nullptr);
         vkDestroyPipeline(_device, _trianglePipeline, nullptr);
+        vkDestroyPipeline(_device, _meshPipeline, nullptr);
 
         //destroy the pipeline layout that they use
         vkDestroyPipelineLayout(_device, _trianglePipelineLayout, nullptr);
+        vkDestroyPipelineLayout(_device, _meshPipelineLayout, nullptr);
     });
+}
+
+void VulkanEngine::load_meshes() {
+    // make the array 3 vertices long
+    _triangleMesh._vertices.resize(3);
+
+    // vertex positions
+    _triangleMesh._vertices[0].position = { 0.5f, 0.5f, 0.0f };
+    _triangleMesh._vertices[1].position = {-0.5f, 0.5f, 0.0f };
+    _triangleMesh._vertices[2].position = { 0.f,-0.5f, 0.0f };
+
+    //vertex colors, all green
+    _triangleMesh._vertices[0].color = { 0.1f, 1.0f, 0.1f }; //pure green
+    _triangleMesh._vertices[1].color = { 1.0f, 0.1f, 0.1f }; //pure green
+    _triangleMesh._vertices[2].color = { 0.1f, 0.1f, 1.0f }; //pure green
+
+    // we don't care about the vertex normals
+
+    upload_mesh(_triangleMesh);
+}
+
+void VulkanEngine::upload_mesh(Mesh& mesh) {
+    VkBufferCreateInfo bufferInfo {};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.pNext = nullptr;
+    bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    bufferInfo.size  = mesh._vertices.size() * sizeof(Vertex);
+
+    // Create a buffer that is writeable by the CPU and readable by the GPU
+    VmaAllocationCreateInfo vmallocInfo {};
+    vmallocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+
+    VK_CHECK(vmaCreateBuffer(_allocator, &bufferInfo, &vmallocInfo, &mesh._vertexBuffer._buffer, &mesh._vertexBuffer._allocation, nullptr));
+
+    _mainDeletionQueue.push_function([=]() {
+        vmaDestroyBuffer(_allocator, mesh._vertexBuffer._buffer, nullptr);
+    });
+
+    // get the mapped memory from VMA in the form of data
+    void* data;
+    vmaMapMemory(_allocator, mesh._vertexBuffer._allocation, &data);
+    // copy the data from the vertices' data to the one mapped by VMA
+    memcpy(data, mesh._vertices.data(), mesh._vertices.size() * sizeof(Vertex));
+    // Unmap the data as we aren't streaming it
+    vmaUnmapMemory(_allocator, mesh._vertexBuffer._allocation);
 }
