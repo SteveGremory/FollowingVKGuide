@@ -74,9 +74,12 @@ public:
 	// Push Constants m8
 	VkPipelineLayout _meshPipelineLayout;
 
-	// suzanne moment
+	// suzanne moment -> rotating triangle moment
 	VkPipeline _meshPipeline;
 	Mesh _triangleMesh;
+
+	// this time suzanne moment fr
+	Mesh _monkeyMesh;
 
 	bool _isInitialized{ false };
 	int _frameNumber {0};

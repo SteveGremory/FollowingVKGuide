@@ -112,7 +112,7 @@ void VulkanEngine::draw()
 
     //bind the mesh vertex buffer with offset 0
     VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(cmd, 0, 1, &_triangleMesh._vertexBuffer._buffer, &offset);
+    vkCmdBindVertexBuffers(cmd, 0, 1, &_monkeyMesh._vertexBuffer._buffer, &offset);
  //make a model view matrix for rendering the object
     //camera position
     glm::vec3 camPos = { 0.f,0.f,-2.f };
@@ -134,7 +134,7 @@ void VulkanEngine::draw()
     vkCmdPushConstants(cmd, _meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants), &constants);
 
     //we can now draw the mesh
-    vkCmdDraw(cmd, _triangleMesh._vertices.size(), 1, 0, 0);
+    vkCmdDraw(cmd, _monkeyMesh._vertices.size(), 1, 0, 0);
 
     //if(_selectedShader == 0) {
     //    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _trianglePipeline);
@@ -642,7 +642,10 @@ void VulkanEngine::load_meshes() {
 
     // we don't care about the vertex normals
 
+    _monkeyMesh.load_from_obj("../models/suzanne.obj");
     upload_mesh(_triangleMesh);
+    upload_mesh(_monkeyMesh);
+
 }
 
 void VulkanEngine::upload_mesh(Mesh& mesh) {
