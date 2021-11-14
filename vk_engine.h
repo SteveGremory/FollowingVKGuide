@@ -81,6 +81,12 @@ public:
 	// this time suzanne moment fr
 	Mesh _monkeyMesh;
 
+	// Depth buffer moment :dab:
+	VkImageView _depthImageView;
+	AllocatedImage _depthImage;
+	// Format of the depth image
+	VkFormat _depthImageFormat;
+
 	bool _isInitialized{ false };
 	int _frameNumber {0};
 	int _selectedShader {0};
@@ -144,6 +150,7 @@ struct PipelineBuilder {
 	VkPipelineColorBlendAttachmentState _colorBlendAttachment;
 	VkPipelineMultisampleStateCreateInfo _multisampling;
 	VkPipelineLayout _pipelineLayout;
+	VkPipelineDepthStencilStateCreateInfo _depthStencilInfo;
 
 	VkPipeline build_pipeline(VkDevice device, VkRenderPass pass);
 

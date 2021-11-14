@@ -164,10 +164,65 @@ VkPipeline PipelineBuilder::build_pipeline(VkDevice device, VkRenderPass pass) {
     pipelineInfo.renderPass = pass;
     pipelineInfo.subpass = 0;
     pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+    pipelineInfo.pDepthStencilState = &_depthStencilInfo;
 
     VkPipeline newPipeline;
     if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &newPipeline ) != VK_SUCCESS) {
         std::cout << "Failed to create graphics pipeline." << std::endl;
         return VK_NULL_HANDLE;
     } else { return newPipeline; }
+}
+
+VkImageCreateInfo vkinit::create_image_info(VkFormat format, VkImageUsageFlags flags, VkExtent3D extent) {
+    VkImageCreateInfo info {};
+    info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    info.pNext = nullptr;
+
+    info.format = format;
+    info.extent = extent;
+
+    info.imageType = VK_IMAGE_TYPE_2D;
+
+    info.mipLevels = 1;
+    info.arrayLayers = 1;
+    info.usage = flags;
+    info.samples = VK_SAMPLE_COUNT_1_BIT;
+    info.tiling = VK_IMAGE_TILING_OPTIMAL;
+
+    return info;
+}
+
+VkImageViewCreateInfo vkinit::create_image_view_info(VkFormat format, VkImage image, VkImageAspectFlags flags) {
+    VkImageViewCreateInfo info {};
+    info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    info.pNext = nullptr;
+
+    info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    info.format = format;
+    info.image = image;
+
+    info.subresourceRange.aspectMask = flags;
+    info.subresourceRange.baseArrayLayer = 0;
+    info.subresourceRange.baseMipLevel = 0;
+    info.subresourceRange.layerCount = 1;
+    info.subresourceRange.levelCount = 1;
+
+    return info;
+}
+
+VkPipelineDepthStencilStateCreateInfo vkinit::depth_stencil_create_info(bool bDepthTest, bool bDepthWrite, VkCompareOp compareOp)
+{
+    VkPipelineDepthStencilStateCreateInfo info = {};
+    info.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    info.pNext = nullptr;
+
+    info.depthTestEnable = bDepthTest ? VK_TRUE : VK_FALSE;
+    info.depthWriteEnable = bDepthWrite ? VK_TRUE : VK_FALSE;
+    info.depthCompareOp = bDepthTest ? compareOp : VK_COMPARE_OP_ALWAYS;
+    info.depthBoundsTestEnable = VK_FALSE;
+    info.minDepthBounds = 0.0f; // Optional
+    info.maxDepthBounds = 1.0f; // Optional
+    info.stencilTestEnable = VK_FALSE;
+
+    return info;
 }

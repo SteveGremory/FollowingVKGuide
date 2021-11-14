@@ -86,6 +86,10 @@ void VulkanEngine::draw()
     float flash = abs(sin(_frameNumber / 120.f));
     clearValue.color = { { 0.0f, 0.0f, flash, 1.0f } };
 
+    VkClearValue depthClear;
+    depthClear.depthStencil.depth = 1.f;
+    
+
     // start the main renderpass.
     // We will use the clear color from above, and the framebuffer of the index the swapchain gave us
     VkRenderPassBeginInfo rpInfo = {};
@@ -99,8 +103,9 @@ void VulkanEngine::draw()
     rpInfo.framebuffer = _frameBuffers[swapchainImageIndex];
 
     // connect clear values
-    rpInfo.clearValueCount = 1;
-    rpInfo.pClearValues = &clearValue;
+    rpInfo.clearValueCount = 2;
+    VkClearValue clearValues[] = { clearValue, depthClear };
+    rpInfo.pClearValues = &clearValues[0];
 
     // begin the render pass
     vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
@@ -135,13 +140,6 @@ void VulkanEngine::draw()
 
     //we can now draw the mesh
     vkCmdDraw(cmd, _monkeyMesh._vertices.size(), 1, 0, 0);
-
-    //if(_selectedShader == 0) {
-    //    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _trianglePipeline);
-    //} else {
-    //    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _redTrianglePipeline);
-    //}
-    //vkCmdDraw(cmd, 3, 1, 0 , 0);
 
     // finalize and end the render pass
     vkCmdEndRenderPass(cmd);
@@ -237,6 +235,7 @@ void VulkanEngine::init_vulkan() {
     // use VkBootstrap to detect the presence of neo
     vkb::PhysicalDeviceSelector selector { vkb_inst };
     vkb::PhysicalDevice physicalDevice = selector.set_minimum_version(1, 1)
+    .prefer_gpu_device_type(vkb::PreferredDeviceType::integrated)
         .set_surface(_surface)
         .select()
         .value();
@@ -276,7 +275,38 @@ void VulkanEngine::init_swapchain() {
 
     _swapchain_image_format = vkbSwapchain.image_format;
 
+    // make the size match the window, because obviously
+    // we don't want a depth buffer smaller/larger than the viewport
+    // because that's fucking stupid (at least afaik)
+    VkExtent3D depthImageExtent = {
+        _windowExtent.width,
+        _windowExtent.height,
+        1
+    };
+
+    // hardcoding the format to 32 bit float
+    _depthImageFormat = VK_FORMAT_D32_SFLOAT;
+
+    // same depth format usage flag
+    VkImageCreateInfo dimg_info = vkinit::create_image_info(_depthImageFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, depthImageExtent);
+
+    // for the depth image, we want to alloc it from the GPU's memory
+    VmaAllocationCreateInfo depth_buffer_allocation_info {};
+    depth_buffer_allocation_info.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+    depth_buffer_allocation_info.requiredFlags = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    // alloc and create the image
+    vmaCreateImage(_allocator, &dimg_info, &depth_buffer_allocation_info, &_depthImage._image, &_depthImage._allocation, nullptr);
+
+    // build an image view for the depth buffer to use for rendering
+    VkImageViewCreateInfo dview_info = vkinit::create_image_view_info(_depthImageFormat, _depthImage._image, VK_IMAGE_ASPECT_DEPTH_BIT);
+
+    VK_CHECK(vkCreateImageView(_device, &dview_info, nullptr, &_depthImageView));
+
     _mainDeletionQueue.push_function([=]() {
+
+        vkDestroyImageView(_device, _depthImageView, nullptr);
+        vkDestroyImage(_device, _depthImage._image, nullptr);
         vkDestroySwapchainKHR(_device, _swapchain, nullptr);
     });
 }
@@ -357,18 +387,37 @@ void VulkanEngine::init_default_renderpass() {
     color_attachment_ref.attachment = 0;
     color_attachment_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; // Image is on a layout optimal to be written into by rendering commands.
 
+    VkAttachmentDescription depth_attachment {};
+    depth_attachment.flags = 0;
+    depth_attachment.format = _depthImageFormat;
+    depth_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    depth_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depth_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    depth_attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    depth_attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depth_attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    depth_attachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference depth_attachment_ref = {};
+    depth_attachment_ref.attachment = 1;
+    depth_attachment_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
     // single subpass
     VkSubpassDescription subpass {};
     subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     subpass.colorAttachmentCount = 1;
     subpass.pColorAttachments = &color_attachment_ref;
+    subpass.pDepthStencilAttachment = &depth_attachment_ref;
+
+    //array of 2 attachments, one for the color, and other for depth
+    VkAttachmentDescription attachments[2] = { color_attachment, depth_attachment };
 
     VkRenderPassCreateInfo render_pass_info {};
     render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
     
-    // connect the color attachment
-    render_pass_info.attachmentCount = 1;
-    render_pass_info.pAttachments = &color_attachment;
+    // connect the color && depth attachments
+    render_pass_info.attachmentCount = 2;
+    render_pass_info.pAttachments = &attachments[0];
     // connect the subpass
     render_pass_info.subpassCount = 1;
     render_pass_info.pSubpasses = &subpass;
@@ -400,7 +449,12 @@ void VulkanEngine::init_framebuffers() {
 
     // create framebuffers for each of the swapchain image views
     for (int i = 0; i < swapchain_imagecount; i++) {
-        frameBufferInfo.pAttachments = &_swapchain_image_views[i];
+        VkImageView attachments[2];
+        attachments[0] = _swapchain_image_views[i];
+        attachments[1] = _depthImageView;
+ 
+        frameBufferInfo.pAttachments = attachments;
+        frameBufferInfo.attachmentCount = 2;
         VK_CHECK(vkCreateFramebuffer(_device, &frameBufferInfo, nullptr, &_frameBuffers[i]));
 
         _mainDeletionQueue.push_function([=]() {
@@ -553,6 +607,8 @@ void VulkanEngine::init_pipelines() {
     // pipeline layout
     pipelineBuilder._pipelineLayout = _trianglePipelineLayout;
 
+    pipelineBuilder._depthStencilInfo = vkinit::depth_stencil_create_info(true, true, VK_COMPARE_OP_LESS_OR_EQUAL);
+
     // finally.
     _trianglePipeline = pipelineBuilder.build_pipeline(_device, _renderpass);
 
@@ -636,13 +692,13 @@ void VulkanEngine::load_meshes() {
     _triangleMesh._vertices[2].position = { 0.f,-0.5f, 0.0f };
 
     //vertex colors, all green
-    _triangleMesh._vertices[0].color = { 0.1f, 1.0f, 0.1f }; //pure green
-    _triangleMesh._vertices[1].color = { 1.0f, 0.1f, 0.1f }; //pure green
-    _triangleMesh._vertices[2].color = { 0.1f, 0.1f, 1.0f }; //pure green
+    _triangleMesh._vertices[0].color = { 0.1f, 1.0f, 0.1f };
+    _triangleMesh._vertices[1].color = { 1.0f, 0.1f, 0.1f };
+    _triangleMesh._vertices[2].color = { 0.1f, 0.1f, 1.0f };
 
     // we don't care about the vertex normals
 
-    _monkeyMesh.load_from_obj("../models/suzanne.obj");
+    _monkeyMesh.load_from_obj("../models/high_poly_suzanne.obj");
     upload_mesh(_triangleMesh);
     upload_mesh(_monkeyMesh);
 
