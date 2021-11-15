@@ -4,8 +4,8 @@
 #include <iostream>
 #include <fstream>
 
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_vulkan.h>
+#include <SDL.h>
+#include <SDL_vulkan.h>
 
 #include <glm/glm.hpp>
 #include <glm/gtx/transform.hpp>
@@ -44,7 +44,7 @@ void VulkanEngine::init()
         _windowExtent.height,
         window_flags
     );
-
+    
     init_vulkan();
     init_swapchain();
     init_commands();
@@ -235,7 +235,7 @@ void VulkanEngine::init_vulkan() {
     // use VkBootstrap to detect the presence of neo
     vkb::PhysicalDeviceSelector selector { vkb_inst };
     vkb::PhysicalDevice physicalDevice = selector.set_minimum_version(1, 1)
-    .prefer_gpu_device_type(vkb::PreferredDeviceType::integrated)
+    .prefer_gpu_device_type(vkb::PreferredDeviceType::virtual_gpu)
         .set_surface(_surface)
         .select()
         .value();

@@ -19,11 +19,13 @@ find_package(Vulkan REQUIRED)
 add_subdirectory(deps/vk-bootstrap)
 add_subdirectory(deps/VulkanMemoryAllocator)
 add_subdirectory(deps/tinyobjloader)
+add_subdirectory(deps/glm)
+add_subdirectory(deps/SDL)
+
 target_include_directories(Main PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}" ${VULKAN_HADERS_INCLUDE_DIRS})
 
-find_package(glm)
 target_link_libraries(Main vk-bootstrap VulkanMemoryAllocator glm::glm tinyobjloader)
-target_link_libraries(Main Vulkan::Vulkan SDL2)
+target_link_libraries(Main Vulkan::Vulkan SDL2::SDL2)
 
 find_program(GLSL_VALIDATOR glslangValidator HINTS /usr/bin /usr/local/bin $ENV{VULKAN_SDK}/Bin/ $ENV{VULKAN_SDK}/Bin32/)
 
