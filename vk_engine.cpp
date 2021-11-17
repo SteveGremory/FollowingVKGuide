@@ -214,6 +214,7 @@ void VulkanEngine::run() {
     }
 }
 
+
 void VulkanEngine::init_vulkan() {
     vkb::InstanceBuilder builder;
     auto inst_ret = builder.set_app_name("")
@@ -263,7 +264,7 @@ void VulkanEngine::init_vulkan() {
 void VulkanEngine::init_swapchain() {
     vkb::SwapchainBuilder swapchainBuilder { _chosen_GPU, _device, _surface };
     vkb::Swapchain vkbSwapchain = swapchainBuilder.use_default_format_selection()
-        .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
+        .set_desired_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR)
         .set_desired_extent(_windowExtent.width, _windowExtent.height)
         .build()
         .value();
@@ -728,4 +729,29 @@ void VulkanEngine::upload_mesh(Mesh& mesh) {
     memcpy(data, mesh._vertices.data(), mesh._vertices.size() * sizeof(Vertex));
     // Unmap the data as we aren't streaming it
     vmaUnmapMemory(_allocator, mesh._vertexBuffer._allocation);
+}
+
+Material* VulkanEngine::create_material(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name)
+{
+    Material mat;
+    mat.pipeline = pipeline;
+    mat.pipelineLayout = layout;
+    _materials[name] = mat;
+    return &_materials[name];
+}
+
+Material* VulkanEngine::get_material(const std::string& name)
+{
+    auto item = _materials.find(name);
+    if (item == _materials.end());
+    return nullptr;
+}
+
+Mesh* VulkanEngine::get_mesh(const std::string& name)
+{
+    return nullptr;
+}
+
+void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int count)
+{
 }

@@ -9,6 +9,7 @@
 #include <functional>
 #include <vk_mesh.h>
 #include <glm/glm.hpp>
+#include <unordered_map>
 #include "vk_mem_alloc.h"
 
 struct MeshPushConstants {
@@ -32,8 +33,39 @@ struct DeletionQueue {
 
 };
 
+struct PipelineBuilder {
+	std::vector<VkPipelineShaderStageCreateInfo> _shaderStages;
+	VkPipelineVertexInputStateCreateInfo _vertexInputInfo;
+	VkPipelineInputAssemblyStateCreateInfo _inputAssembly;
+	VkViewport _viewport;
+	VkRect2D _scissor;
+	VkPipelineRasterizationStateCreateInfo _rasterizer;
+	VkPipelineColorBlendAttachmentState _colorBlendAttachment;
+	VkPipelineMultisampleStateCreateInfo _multisampling;
+	VkPipelineLayout _pipelineLayout;
+	VkPipelineDepthStencilStateCreateInfo _depthStencilInfo;
+
+	VkPipeline build_pipeline(VkDevice device, VkRenderPass pass);
+
+};
+
+struct Material {
+	VkPipeline pipeline;
+	VkPipelineLayout pipelineLayout;
+};
+
+struct RenderObject {
+	Mesh* mesh;
+	Material* material;
+	glm::mat4 transformMatrix;
+};
+
 class VulkanEngine {
 public:
+	//
+	// Public Variables:
+	//
+	// Semaphores
 	VkSemaphore _present_semaphore, _render_semaphore;
 	VkFence _render_fence;
 
@@ -86,73 +118,63 @@ public:
 	AllocatedImage _depthImage;
 	// Format of the depth image
 	VkFormat _depthImageFormat;
+	
+	// Objects to be rendered
+	std::vector<RenderObject> _renderables;
+	// Hashmap of materials
+	std::unordered_map<std::string, Material> _materials;
+	// Hashmap of meshes
+	std::unordered_map<std::string, Mesh> _meshes;
 
-	bool _isInitialized{ false };
+
+
+	// SDL related variables
+	bool _isInitialized { false };
 	int _frameNumber {0};
 	int _selectedShader {0};
-
-
 	VkExtent2D _windowExtent{ 1280 , 768 };
-
 	struct SDL_Window* _window{ nullptr };
 
+	//
+	// Public Functions:
+	//
 	//initializes everything in the engine
 	void init();
-
 	//shuts down the engine
 	void cleanup();
-
 	//draw loop
 	void draw();
-
 	//run main loop
 	void run();
+	// Create material
+	Material* create_material(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name);
+	// Get the material from the hashmap, returns nullptr if it isn't found.
+	Material* get_material(const std::string& name);
+	// Get mesh; returns nullptr if the material isn't found.
+	Mesh* get_mesh(const std::string& name);
+	// Draw objects
+	void draw_objects(VkCommandBuffer cmd, RenderObject* first, int count);
 
 private:
 	// Init low level vulkan stuff
 	void init_vulkan();
-
 	// Init the swapchain
 	void init_swapchain();
-
 	// Init the commandbuffer
 	void init_commands();
-
 	// Init the default renderpass
 	void init_default_renderpass();
-
 	// Init the framebuffers
 	void init_framebuffers();
-
 	// Init sync structures
 	void init_sync_structures();
-
 	// Init vulkan pipelines
 	void init_pipelines();
-
 	// load the shader module from the filepath
 	bool load_shader_module(const char* filepath, VkShaderModule* outshaderModule);
-	
 	// get them models
 	void load_meshes();
-
 	// upload the meshes to the pipeline
 	void upload_mesh(Mesh& mesh);
-};
-
-struct PipelineBuilder {
-	std::vector<VkPipelineShaderStageCreateInfo> _shaderStages;
-	VkPipelineVertexInputStateCreateInfo _vertexInputInfo;
-	VkPipelineInputAssemblyStateCreateInfo _inputAssembly;
-	VkViewport _viewport;
-	VkRect2D _scissor;
-	VkPipelineRasterizationStateCreateInfo _rasterizer;
-	VkPipelineColorBlendAttachmentState _colorBlendAttachment;
-	VkPipelineMultisampleStateCreateInfo _multisampling;
-	VkPipelineLayout _pipelineLayout;
-	VkPipelineDepthStencilStateCreateInfo _depthStencilInfo;
-
-	VkPipeline build_pipeline(VkDevice device, VkRenderPass pass);
 
 };
-
