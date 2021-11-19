@@ -11,6 +11,7 @@
 #include <glm/glm.hpp>
 #include <unordered_map>
 #include "vk_mem_alloc.h"
+#include <iostream>
 
 struct MeshPushConstants {
 	glm::vec4 data;
@@ -170,6 +171,8 @@ private:
 	void init_sync_structures();
 	// Init vulkan pipelines
 	void init_pipelines();
+	// Init the scene
+	void init_scene();
 	// load the shader module from the filepath
 	bool load_shader_module(const char* filepath, VkShaderModule* outshaderModule);
 	// get them models

@@ -1,8 +1,9 @@
-﻿
+﻿#define VMA_IMPLEMENTATION
+
 #include "vk_engine.h"
 
-#include <iostream>
 #include <fstream>
+#include <iostream>
 
 #include <SDL.h>
 #include <SDL_vulkan.h>
@@ -10,41 +11,38 @@
 #include <glm/glm.hpp>
 #include <glm/gtx/transform.hpp>
 
-#include <vk_types.h>
-#include <vk_initializers.h>
-
 #include "VkBootstrap.h"
-
-#define VMA_IMPLEMENTATION
 #include "vk_mem_alloc.h"
+#include <vk_initializers.h>
+#include <vk_types.h>
+
+// TODO: Make function documentation better by specifying args and their purposes
 
 #define VK_CHECK(x)                                                     \
-    do                                                                  \
-    {                                                                   \
+    do {                                                                \
         VkResult err = x;                                               \
-        if (err)                                                        \
-        {                                                               \
-            std::cout <<"Detected Vulkan error: " << err << std::endl;  \
+        if (err) {                                                      \
+            std::cout << "Detected Vulkan error: " << err << std::endl; \
             abort();                                                    \
         }                                                               \
     } while (0)
 
+//  Init (Main): SDL and all the vulkan components
 void VulkanEngine::init()
 {
-    // We initialize SDL and create a window with it. 
+    // We initialize SDL and create a window with it.
     SDL_Init(SDL_INIT_VIDEO);
 
-    SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
-    
+    SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_VULKAN);
+
     _window = SDL_CreateWindow(
         "Vulkan Engine",
         SDL_WINDOWPOS_UNDEFINED,
         SDL_WINDOWPOS_UNDEFINED,
         _windowExtent.width,
         _windowExtent.height,
-        window_flags
-    );
-    
+        window_flags);
+
     init_vulkan();
     init_swapchain();
     init_commands();
@@ -53,23 +51,24 @@ void VulkanEngine::init()
     init_sync_structures();
     init_pipelines();
     load_meshes();
+    init_scene();
 
     //everything went fine
     _isInitialized = true;
 }
 
+//  Draw: Called every frame, drawcall
 void VulkanEngine::draw()
 {
-    ////nothing yet
     // that changes now.
     VK_CHECK(vkWaitForFences(_device, 1, &_render_fence, true, 1000000000));
     VK_CHECK(vkResetFences(_device, 1, &_render_fence));
 
     //request image from the swapchain, one second timeout
     uint32_t swapchainImageIndex;
-    VK_CHECK(vkAcquireNextImageKHR(_device, _swapchain, 1000000000, _present_semaphore, nullptr, &swapchainImageIndex)); 
+    VK_CHECK(vkAcquireNextImageKHR(_device, _swapchain, 1000000000, _present_semaphore, nullptr, &swapchainImageIndex));
     VK_CHECK(vkResetCommandBuffer(_mainCommandBuffer, 0));
-    
+
     VkCommandBuffer cmd = _mainCommandBuffer;
     // LET THE COMMAND BUFFER RECORDING BEGIN!
     VkCommandBufferBeginInfo beginInfo {};
@@ -88,7 +87,6 @@ void VulkanEngine::draw()
 
     VkClearValue depthClear;
     depthClear.depthStencil.depth = 1.f;
-    
 
     // start the main renderpass.
     // We will use the clear color from above, and the framebuffer of the index the swapchain gave us
@@ -109,41 +107,15 @@ void VulkanEngine::draw()
 
     // begin the render pass
     vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
-    
+
     // record???? wtf??? where??? yes now i know, because we didn't have the pipeline back then
     // now. we. do.
-   
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _meshPipeline);
 
-    //bind the mesh vertex buffer with offset 0
-    VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(cmd, 0, 1, &_monkeyMesh._vertexBuffer._buffer, &offset);
- //make a model view matrix for rendering the object
-    //camera position
-    glm::vec3 camPos = { 0.f,0.f,-2.f };
-
-    glm::mat4 view = glm::translate(glm::mat4(1.f), camPos);
-    //camera projection
-    glm::mat4 projection = glm::perspective(glm::radians(70.f), 1700.f / 900.f, 0.1f, 200.0f);
-    projection[1][1] *= -1;
-    //model rotation
-    glm::mat4 model = glm::rotate(glm::mat4{ 1.0f }, glm::radians(_frameNumber * 0.4f), glm::vec3(0, 1, 0));
-
-    //calculate final mesh matrix
-    glm::mat4 mesh_matrix = projection * view * model;
-
-    MeshPushConstants constants;
-    constants.render_matrix = mesh_matrix;
-
-    //upload the matrix to the GPU via push constants
-    vkCmdPushConstants(cmd, _meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants), &constants);
-
-    //we can now draw the mesh
-    vkCmdDraw(cmd, _monkeyMesh._vertices.size(), 1, 0, 0);
+    draw_objects(cmd, _renderables.data(), _renderables.size());
 
     // finalize and end the render pass
     vkCmdEndRenderPass(cmd);
-   
+
     // finalize the command buffer
     VK_CHECK(vkEndCommandBuffer(cmd));
 
@@ -191,7 +163,9 @@ void VulkanEngine::draw()
     _frameNumber++;
 }
 
-void VulkanEngine::run() {
+//  Run: SDL stuff
+void VulkanEngine::run()
+{
     SDL_Event e;
     bool bQuit = false;
 
@@ -199,12 +173,13 @@ void VulkanEngine::run() {
     while (!bQuit) {
         //Handle events on queue
         while (SDL_PollEvent(&e) != 0) {
-            //close the window when user alt-f4s or clicks the X button			
-            if (e.type == SDL_QUIT) bQuit = true;
+            //close the window when user alt-f4s or clicks the X button
+            if (e.type == SDL_QUIT)
+                bQuit = true;
             else if (e.type == SDL_KEYDOWN) {
                 if (e.key.keysym.sym == SDLK_SPACE) {
                     _selectedShader += 1;
-                    if(_selectedShader > 1) {
+                    if (_selectedShader > 1) {
                         _selectedShader = 0;
                     }
                 }
@@ -214,14 +189,16 @@ void VulkanEngine::run() {
     }
 }
 
-
-void VulkanEngine::init_vulkan() {
+//  Init (Vulkan): Init everything vulkan needs,
+//    GPU drivers and all
+void VulkanEngine::init_vulkan()
+{
     vkb::InstanceBuilder builder;
     auto inst_ret = builder.set_app_name("")
-        .request_validation_layers(true)
-        .require_api_version(1, 1, 0)
-        .use_default_debug_messenger()
-        .build();
+                        .request_validation_layers(true)
+                        .require_api_version(1, 1, 0)
+                        .use_default_debug_messenger()
+                        .build();
 
     vkb::Instance vkb_inst = inst_ret.value();
 
@@ -236,10 +213,10 @@ void VulkanEngine::init_vulkan() {
     // use VkBootstrap to detect the presence of neo
     vkb::PhysicalDeviceSelector selector { vkb_inst };
     vkb::PhysicalDevice physicalDevice = selector.set_minimum_version(1, 1)
-    .prefer_gpu_device_type(vkb::PreferredDeviceType::virtual_gpu)
-        .set_surface(_surface)
-        .select()
-        .value();
+                                             .prefer_gpu_device_type(vkb::PreferredDeviceType::integrated)
+                                             .set_surface(_surface)
+                                             .select()
+                                             .value();
 
     // Check if it's the real neo
     vkb::DeviceBuilder deviceBuilder { physicalDevice };
@@ -259,22 +236,32 @@ void VulkanEngine::init_vulkan() {
     allocatorInfo.physicalDevice = _chosen_GPU;
     allocatorInfo.instance = _instance;
     vmaCreateAllocator(&allocatorInfo, &_allocator);
+
+    _mainDeletionQueue.push_function([&]() {
+        vmaDestroyAllocator(_allocator);
+    });
 }
 
-void VulkanEngine::init_swapchain() {
+//  Init (Swapchain): Init the swapchain and the memory allocator
+void VulkanEngine::init_swapchain()
+{
     vkb::SwapchainBuilder swapchainBuilder { _chosen_GPU, _device, _surface };
     vkb::Swapchain vkbSwapchain = swapchainBuilder.use_default_format_selection()
-        .set_desired_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR)
-        .set_desired_extent(_windowExtent.width, _windowExtent.height)
-        .build()
-        .value();
-    
+                                      .set_desired_present_mode(VK_PRESENT_MODE_MAILBOX_KHR)
+                                      .set_desired_extent(_windowExtent.width, _windowExtent.height)
+                                      .build()
+                                      .value();
+
     // store the swapchain and it's related images
     _swapchain = vkbSwapchain.swapchain;
     _swapchain_images = vkbSwapchain.get_images().value();
     _swapchain_image_views = vkbSwapchain.get_image_views().value();
 
     _swapchain_image_format = vkbSwapchain.image_format;
+
+    _mainDeletionQueue.push_function([=] {
+        vkDestroySwapchainKHR(_device, _swapchain, nullptr);
+    });
 
     // make the size match the window, because obviously
     // we don't want a depth buffer smaller/larger than the viewport
@@ -305,33 +292,36 @@ void VulkanEngine::init_swapchain() {
     VK_CHECK(vkCreateImageView(_device, &dview_info, nullptr, &_depthImageView));
 
     _mainDeletionQueue.push_function([=]() {
-
         vkDestroyImageView(_device, _depthImageView, nullptr);
-        vkDestroyImage(_device, _depthImage._image, nullptr);
-        vkDestroySwapchainKHR(_device, _swapchain, nullptr);
+        vmaDestroyImage(_allocator, _depthImage._image, _depthImage._allocation);
     });
 }
 
-void VulkanEngine::cleanup() {
+//  Cleanup: Run the deletion queue and general cleanup
+void VulkanEngine::cleanup()
+{
     // pretty self explainatory
     if (_isInitialized) {
-        //make sure the GPU has stopped doing its things
-        vkWaitForFences(_device, 1, &_render_fence, true, 1000000000);
+        // wait till the GPU is done doing it's thing
+        vkDeviceWaitIdle(_device);
 
         _mainDeletionQueue.flush();
 
         vkDestroySurfaceKHR(_instance, _surface, nullptr);
 
         vkDestroyDevice(_device, nullptr);
+        vkb::destroy_debug_utils_messenger(_instance, _debug_messenger);
         vkDestroyInstance(_instance, nullptr);
 
         SDL_DestroyWindow(_window);
     }
 }
 
-void VulkanEngine::init_commands() {
+//  Init (Command Buffers): Init the command buffers
+void VulkanEngine::init_commands()
+{
     /*
-        So here's how the commandBuffers work:
+        So here's how command buffers work:
         -------------------------------------------------------------
         VkCommandPool
             |
@@ -364,7 +354,10 @@ void VulkanEngine::init_commands() {
     });
 }
 
-void VulkanEngine::init_default_renderpass() {
+//   Init (Render Pass): Init the renderpass
+//      all it's attachments and everything
+void VulkanEngine::init_default_renderpass()
+{
     // the renderpass will use the following color attachment
     VkAttachmentDescription color_attachment {};
     // make the images the same format as the swapchain
@@ -415,7 +408,7 @@ void VulkanEngine::init_default_renderpass() {
 
     VkRenderPassCreateInfo render_pass_info {};
     render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    
+
     // connect the color && depth attachments
     render_pass_info.attachmentCount = 2;
     render_pass_info.pAttachments = &attachments[0];
@@ -428,10 +421,12 @@ void VulkanEngine::init_default_renderpass() {
     _mainDeletionQueue.push_function([=]() {
         vkDestroyRenderPass(_device, _renderpass, nullptr);
     });
-
 }
 
-void VulkanEngine::init_framebuffers() {
+//  Init (framebuffers): Init the framebuffers
+//      with the window properties
+void VulkanEngine::init_framebuffers()
+{
     // create frame buffers
     VkFramebufferCreateInfo frameBufferInfo {};
     frameBufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -453,7 +448,7 @@ void VulkanEngine::init_framebuffers() {
         VkImageView attachments[2];
         attachments[0] = _swapchain_image_views[i];
         attachments[1] = _depthImageView;
- 
+
         frameBufferInfo.pAttachments = attachments;
         frameBufferInfo.attachmentCount = 2;
         VK_CHECK(vkCreateFramebuffer(_device, &frameBufferInfo, nullptr, &_frameBuffers[i]));
@@ -463,11 +458,11 @@ void VulkanEngine::init_framebuffers() {
             vkDestroyImageView(_device, _swapchain_image_views[i], nullptr);
         });
     }
-
-    
 }
 
-void VulkanEngine::init_sync_structures() {
+//  Init (Sync Structures): Init semaphores and fences
+void VulkanEngine::init_sync_structures()
+{
     // create seamen (semaphores)
     VkFenceCreateInfo fenceInfo {};
     fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
@@ -481,7 +476,6 @@ void VulkanEngine::init_sync_structures() {
     _mainDeletionQueue.push_function([=]() {
         vkDestroyFence(_device, _render_fence, nullptr);
     });
-
 
     VkSemaphoreCreateInfo semaphoreInfo {};
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -497,15 +491,19 @@ void VulkanEngine::init_sync_structures() {
     });
 }
 
-bool VulkanEngine::load_shader_module(const char* filepath, VkShaderModule* outshaderModule) {
-    std::ifstream file (filepath, std::ios::ate | std::ios::binary);
+//  Loader (Shader Module): Helper function to load the shader modules
+//      and return them in the form of VkShaderModule(s)
+//      in the second argument of the function
+bool VulkanEngine::load_shader_module(const char* filepath, VkShaderModule* outshaderModule)
+{
+    std::ifstream file(filepath, std::ios::ate | std::ios::binary);
     if (!file.is_open()) {
         return false;
     }
 
     // Find what the size of the file is by telling where the cursor is
     // as we used std::ios::ate, the cursor will be at the end of the file
-    size_t fileSize = (size_t) file.tellg();
+    size_t fileSize = (size_t)file.tellg();
     std::vector<uint32_t> buffer(fileSize / sizeof(uint32_t));
 
     // put the cursor back at the start of the file
@@ -534,34 +532,46 @@ bool VulkanEngine::load_shader_module(const char* filepath, VkShaderModule* outs
     return true;
 }
 
-void VulkanEngine::init_pipelines() {
-    VkShaderModule 
-        triangleFragShader, redTriangleFragShader, 
+//  Init (Pipeline): Init the rendering pipeline(s) with
+//      everything that was setup
+void VulkanEngine::init_pipelines()
+{
+    VkShaderModule
+        triangleFragShader,
+        redTriangleFragShader,
         triangleVertShader, redTriangleVertShader,
         meshVertShader;
-    
-    if (!load_shader_module("../shaders/compiled/triangle_colored.frag.spv", &triangleFragShader))
-    { std::cout << "Failed to create fragment shader." << std::endl; } else
-    { std::cout << "Successfully created fragment shader." << std::endl; }
 
-    
-    if (!load_shader_module("../shaders/compiled/triangle_colored.vert.spv", &triangleVertShader))
-    { std::cout << "Failed to create vertex shader." << std::endl; } else
-    { std::cout << "Successfully created vertex shader." << std::endl; }
+    if (!load_shader_module("../shaders/compiled/triangle_colored.frag.spv", &triangleFragShader)) {
+        std::cout << "Failed to create fragment shader." << std::endl;
+    } else {
+        std::cout << "Successfully created fragment shader." << std::endl;
+    }
 
-    
-    if(!load_shader_module("../shaders/compiled/triangle.vert.spv", &redTriangleVertShader))
-    { std::cout << "Failed to create Red fragment shader." << std::endl; } else
-    { std::cout << "Successfully created Red fragment shader." << std::endl; }
+    if (!load_shader_module("../shaders/compiled/triangle_colored.vert.spv", &triangleVertShader)) {
+        std::cout << "Failed to create vertex shader." << std::endl;
+    } else {
+        std::cout << "Successfully created vertex shader." << std::endl;
+    }
 
-    if(!load_shader_module("../shaders/compiled/triangle.frag.spv", &redTriangleFragShader))
-    { std::cout << "Failed to create Red vertex shader." << std::endl; } else
-    { std::cout << "Successfully created vertex shader." << std::endl; }
+    if (!load_shader_module("../shaders/compiled/triangle.vert.spv", &redTriangleVertShader)) {
+        std::cout << "Failed to create Red fragment shader." << std::endl;
+    } else {
+        std::cout << "Successfully created Red fragment shader." << std::endl;
+    }
 
-    if(!load_shader_module("../shaders/compiled/tri_mesh.vert.spv", &meshVertShader))
-    { std::cout << "Failed to create Mesh fragment shader." << std::endl; } else
-    { std::cout << "Successfully created fragment shader." << std::endl; }
-    
+    if (!load_shader_module("../shaders/compiled/triangle.frag.spv", &redTriangleFragShader)) {
+        std::cout << "Failed to create Red vertex shader." << std::endl;
+    } else {
+        std::cout << "Successfully created vertex shader." << std::endl;
+    }
+
+    if (!load_shader_module("../shaders/compiled/tri_mesh.vert.spv", &meshVertShader)) {
+        std::cout << "Failed to create Mesh fragment shader." << std::endl;
+    } else {
+        std::cout << "Successfully created fragment shader." << std::endl;
+    }
+
     // not using any desc. sets or anything so it's good for now.
     VkPipelineLayoutCreateInfo pipeline_layout_info = vkinit::pipeline_layout_create_info();
 
@@ -580,9 +590,9 @@ void VulkanEngine::init_pipelines() {
     pipelineBuilder._vertexInputInfo = vkinit::vertex_input_stage_create_info();
 
     // set polygon mode:
-        // VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST : normal triangle drawing
-        // VK_PRIMITIVE_TOPOLOGY_POINT_LIST    : points
-        // VK_PRIMITIVE_TOPOLOGY_LINE_LIST     : line-list
+    // VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST : normal triangle drawing
+    // VK_PRIMITIVE_TOPOLOGY_POINT_LIST    : points
+    // VK_PRIMITIVE_TOPOLOGY_LINE_LIST     : line-list
     pipelineBuilder._inputAssembly = vkinit::input_assembly_create_info(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 
     //build viewport and scissor from the swapchain extents
@@ -649,8 +659,6 @@ void VulkanEngine::init_pipelines() {
     mesh_pipeline_layout_info.pPushConstantRanges = &pushConstantRange;
     mesh_pipeline_layout_info.pushConstantRangeCount = 1;
 
-    VK_CHECK(vkCreatePipelineLayout(_device, &mesh_pipeline_layout_info, nullptr, &_meshPipelineLayout));
-
     // add the other shaders
     pipelineBuilder._shaderStages.push_back(
         vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_VERTEX_BIT, meshVertShader));
@@ -659,8 +667,12 @@ void VulkanEngine::init_pipelines() {
     pipelineBuilder._shaderStages.push_back(
         vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_FRAGMENT_BIT, triangleFragShader));
 
+    VK_CHECK(vkCreatePipelineLayout(_device, &mesh_pipeline_layout_info, nullptr, &_meshPipelineLayout));
+
     pipelineBuilder._pipelineLayout = _meshPipelineLayout;
     _meshPipeline = pipelineBuilder.build_pipeline(_device, _renderpass);
+
+    create_material(_meshPipeline, _meshPipelineLayout, "defaultmaterial");
 
     //destroy all shader modules, outside of the queue
     vkDestroyShaderModule(_device, meshVertShader, nullptr);
@@ -668,8 +680,6 @@ void VulkanEngine::init_pipelines() {
     vkDestroyShaderModule(_device, redTriangleFragShader, nullptr);
     vkDestroyShaderModule(_device, triangleFragShader, nullptr);
     vkDestroyShaderModule(_device, triangleVertShader, nullptr);
-
-    
 
     _mainDeletionQueue.push_function([=]() {
         //destroy the 2 pipelines we have created
@@ -683,14 +693,16 @@ void VulkanEngine::init_pipelines() {
     });
 }
 
-void VulkanEngine::load_meshes() {
+//  Loader (Meshes): get the meshes, upload to the GPU and send to the scene
+void VulkanEngine::load_meshes()
+{
     // make the array 3 vertices long
     _triangleMesh._vertices.resize(3);
 
     // vertex positions
     _triangleMesh._vertices[0].position = { 0.5f, 0.5f, 0.0f };
-    _triangleMesh._vertices[1].position = {-0.5f, 0.5f, 0.0f };
-    _triangleMesh._vertices[2].position = { 0.f,-0.5f, 0.0f };
+    _triangleMesh._vertices[1].position = { -0.5f, 0.5f, 0.0f };
+    _triangleMesh._vertices[2].position = { 0.f, -0.5f, 0.0f };
 
     //vertex colors, all green
     _triangleMesh._vertices[0].color = { 0.1f, 1.0f, 0.1f };
@@ -703,14 +715,18 @@ void VulkanEngine::load_meshes() {
     upload_mesh(_triangleMesh);
     upload_mesh(_monkeyMesh);
 
+    _meshes["monkey"] = _monkeyMesh;
+    _meshes["triangle"] = _triangleMesh;
 }
 
-void VulkanEngine::upload_mesh(Mesh& mesh) {
+//  Helper for Loader (Meshes): Upload the given mesh to the GPU memory
+void VulkanEngine::upload_mesh(Mesh& mesh)
+{
     VkBufferCreateInfo bufferInfo {};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferInfo.pNext = nullptr;
     bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    bufferInfo.size  = mesh._vertices.size() * sizeof(Vertex);
+    bufferInfo.size = mesh._vertices.size() * sizeof(Vertex);
 
     // Create a buffer that is writeable by the CPU and readable by the GPU
     VmaAllocationCreateInfo vmallocInfo {};
@@ -719,7 +735,7 @@ void VulkanEngine::upload_mesh(Mesh& mesh) {
     VK_CHECK(vmaCreateBuffer(_allocator, &bufferInfo, &vmallocInfo, &mesh._vertexBuffer._buffer, &mesh._vertexBuffer._allocation, nullptr));
 
     _mainDeletionQueue.push_function([=]() {
-        vmaDestroyBuffer(_allocator, mesh._vertexBuffer._buffer, nullptr);
+        vmaDestroyBuffer(_allocator, mesh._vertexBuffer._buffer, mesh._vertexBuffer._allocation);
     });
 
     // get the mapped memory from VMA in the form of data
@@ -731,6 +747,7 @@ void VulkanEngine::upload_mesh(Mesh& mesh) {
     vmaUnmapMemory(_allocator, mesh._vertexBuffer._allocation);
 }
 
+//  Helper (Materials): Create a material from the scene
 Material* VulkanEngine::create_material(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name)
 {
     Material mat;
@@ -740,18 +757,108 @@ Material* VulkanEngine::create_material(VkPipeline pipeline, VkPipelineLayout la
     return &_materials[name];
 }
 
+//  Helper (Materials): Get a material from the scene
 Material* VulkanEngine::get_material(const std::string& name)
 {
     auto item = _materials.find(name);
-    if (item == _materials.end());
-    return nullptr;
+    if (item == _materials.end())
+        return nullptr;
+    else
+        return &(*item).second;
 }
 
+//  Helper (Meshes): Get a mesh from the scene
 Mesh* VulkanEngine::get_mesh(const std::string& name)
 {
-    return nullptr;
+    auto item = _meshes.find(name);
+    if (item == _meshes.end())
+        return nullptr;
+    else
+        return &(*item).second;
 }
 
+//  Helper (Scene)
+void VulkanEngine::init_scene()
+{
+    RenderObject monkey;
+    monkey.mesh = get_mesh("monkey");
+    monkey.material = get_material("defaultmaterial");
+    monkey.transformMatrix = glm::mat4 { 1.0f };
+
+    // yo me wanna render monke hoot hoot
+    _renderables.push_back(monkey);
+
+    // apparently we create a lotta triangles in a grid and place them around the monkee
+    // idfk how
+    for (int x = -20; x <= 20; x++) {
+        for (int y = -20; y <= 20; y++) {
+            RenderObject triangles;
+            triangles.mesh = get_mesh("triangle");
+            triangles.material = get_material("defaultmaterial");
+
+            // tbh i don't understand what any of the GLM shit does
+            glm::mat4 translation = glm::translate(glm::mat4 { 1.0f }, glm::vec3 { x, 0, y });
+            glm::mat4 scale = glm::scale(glm::mat4 { 1.0f }, glm::vec3(0.2f, 0.2f, 0.2f));
+
+            triangles.transformMatrix = translation * scale;
+
+            // illuminati moment + triangle moment + didn't ask + who asked ... and so on
+            _renderables.push_back(triangles);
+        }
+    }
+}
+
+//  Drawcall (Scene): Draw all the objects that are in provided to the provided command buffer
 void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int count)
 {
+    // make a model view martix for rendering the object
+    // camerea view
+    glm::vec3 cameraPos = { 0.0f, -.6f, -10.0f };
+    glm::mat4 view = glm::translate(glm::mat4 { 1.0f }, cameraPos);
+
+    // camera projection
+    glm::mat4 projection = glm::perspective(glm::radians(70.0f), 1700.0f / 900.0f, 0.1f, 200.0f);
+    // make whatever this is a negative value, fuck knows why
+    projection[1][1] *= -1;
+
+    Mesh* lastMesh = nullptr;
+    Material* lastMaterial = nullptr;
+
+    /*
+        There is no need to rebind the same vertex buffer over and over between draws,
+        and the pipeline is the same, but we are pushing the constants on every single call.
+        The loop here is a lot higher performance that you would think.
+        This simple loop will render thousands and thousands of objects with no issue.
+        Binding pipeline is a expensive call, but drawing the same object over and over with different push constants is very fast.
+            - VkGuide.
+    */
+
+    for (int i = 0; i < count; i++) {
+        RenderObject& object = first[i];
+
+        // only bind the pipeline if one hasn't already been bound.
+        if (object.material != lastMaterial) {
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, object.material->pipeline);
+            lastMaterial = object.material;
+        }
+
+        glm::mat4 model = object.transformMatrix;
+        // Find render matrix, calculated on the CPU for some fuckin reason.
+        glm::mat4 mesh_matrix = projection * view * model;
+
+        MeshPushConstants constants;
+        constants.render_matrix = mesh_matrix;
+
+        // upload the mesh to the GPU via push constants
+        vkCmdPushConstants(cmd, object.material->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants), &constants);
+
+        if (object.mesh != lastMesh) {
+            VkDeviceSize offset = 0;
+            vkCmdBindVertexBuffers(cmd, 0, 1, &object.mesh->_vertexBuffer._buffer, &offset);
+            lastMesh = object.mesh;
+        }
+
+        // btw 1 there means that we need 1 instance of that draw call
+        vkCmdDraw(cmd, object.mesh->_vertices.size(), 1, 0, 0);
+    }
 }
