@@ -1,9 +1,10 @@
-#include <vk_mesh.h>
+#include <iostream>
 #include <tiny_obj_loader.h>
 #include <vector>
-#include <iostream>
+#include <vk_mesh.h>
 
-VertexInputDescription Vertex::get_vertex_input_desc() {
+VertexInputDescription Vertex::get_vertex_input_desc()
+{
     VertexInputDescription description;
 
     VkVertexInputBindingDescription mainBinding {};
@@ -14,21 +15,21 @@ VertexInputDescription Vertex::get_vertex_input_desc() {
 
     description.bindings.push_back(mainBinding);
 
-    VkVertexInputAttributeDescription 
+    VkVertexInputAttributeDescription
         positionAttrib {},
         colorAttrib {},
         normalsAttrib {};
-        
+
     positionAttrib.binding = 0;
     positionAttrib.location = 0;
     positionAttrib.offset = offsetof(Vertex, position);
     positionAttrib.format = VK_FORMAT_R32G32B32_SFLOAT;
-    
+
     colorAttrib.binding = 0;
     colorAttrib.location = 2;
     colorAttrib.offset = offsetof(Vertex, color);
     colorAttrib.format = VK_FORMAT_R32G32B32_SFLOAT;
-    
+
     normalsAttrib.binding = 0;
     normalsAttrib.location = 1;
     normalsAttrib.offset = offsetof(Vertex, normals);
@@ -41,7 +42,8 @@ VertexInputDescription Vertex::get_vertex_input_desc() {
     return description;
 };
 
-bool Mesh::load_from_obj(const char* filename) {
+bool Mesh::load_from_obj(const char* filename)
+{
     // this is gonna contain the vertex arrays
     tinyobj::attrib_t attrib;
 
@@ -56,8 +58,12 @@ bool Mesh::load_from_obj(const char* filename) {
     // load the object
     tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, filename, nullptr);
 
-    if (!warn.empty()) { std::cout << "WARN: " << warn << std::endl; }
-    if (!err.empty())  { std::cerr << "ERROR: " << err << std::endl; }
+    if (!warn.empty()) {
+        std::cout << "WARN: " << warn << std::endl;
+    }
+    if (!err.empty()) {
+        std::cerr << "ERROR: " << err << std::endl;
+    }
 
     // Loop over shapes
     for (size_t s = 0; s < shapes.size(); s++) {

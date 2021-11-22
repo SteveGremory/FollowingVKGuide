@@ -61,15 +61,15 @@ void VulkanEngine::init()
 void VulkanEngine::draw()
 {
     // that changes now.
-    VK_CHECK(vkWaitForFences(_device, 1, &_render_fence, true, 1000000000));
-    VK_CHECK(vkResetFences(_device, 1, &_render_fence));
+    VK_CHECK(vkWaitForFences(_device, 1, &get_current_frame()._fence, true, 1000000000));
+    VK_CHECK(vkResetFences(_device, 1, &get_current_frame()._fence));
 
     //request image from the swapchain, one second timeout
     uint32_t swapchainImageIndex;
-    VK_CHECK(vkAcquireNextImageKHR(_device, _swapchain, 1000000000, _present_semaphore, nullptr, &swapchainImageIndex));
-    VK_CHECK(vkResetCommandBuffer(_mainCommandBuffer, 0));
+    VK_CHECK(vkAcquireNextImageKHR(_device, _swapchain, 1000000000, get_current_frame()._presentSemaphore, nullptr, &swapchainImageIndex));
+    VK_CHECK(vkResetCommandBuffer(get_current_frame()._mainCommandBuffer, 0));
 
-    VkCommandBuffer cmd = _mainCommandBuffer;
+    VkCommandBuffer cmd = get_current_frame()._mainCommandBuffer;
     // LET THE COMMAND BUFFER RECORDING BEGIN!
     VkCommandBufferBeginInfo beginInfo {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -108,6 +108,7 @@ void VulkanEngine::draw()
     // begin the render pass
     vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
 
+    // i'll just keep this for the keks, kekw:
     // record???? wtf??? where??? yes now i know, because we didn't have the pipeline back then
     // now. we. do.
 
@@ -130,17 +131,17 @@ void VulkanEngine::draw()
     submitInfo.pWaitDstStageMask = &waitStage;
 
     submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = &_present_semaphore;
+    submitInfo.pWaitSemaphores = &get_current_frame()._presentSemaphore;
 
     submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = &_render_semaphore;
+    submitInfo.pSignalSemaphores = &get_current_frame()._renderSemaphore;
 
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &cmd;
 
     // submit the queue and execute it
     // renderfence will now block everything until this shit finishes shitting
-    VK_CHECK(vkQueueSubmit(_graphicsQueue, 1, &submitInfo, _render_fence));
+    VK_CHECK(vkQueueSubmit(_graphicsQueue, 1, &submitInfo, get_current_frame()._fence));
 
     // this will put the image we just rendered into the visible window.
     // we want to wait on the _renderSemaphore for that,
@@ -152,7 +153,7 @@ void VulkanEngine::draw()
     presentInfo.pSwapchains = &_swapchain;
     presentInfo.swapchainCount = 1;
 
-    presentInfo.pWaitSemaphores = &_render_semaphore;
+    presentInfo.pWaitSemaphores = &get_current_frame()._renderSemaphore;
     presentInfo.waitSemaphoreCount = 1;
 
     presentInfo.pImageIndices = &swapchainImageIndex;
@@ -177,11 +178,23 @@ void VulkanEngine::run()
             if (e.type == SDL_QUIT)
                 bQuit = true;
             else if (e.type == SDL_KEYDOWN) {
-                if (e.key.keysym.sym == SDLK_SPACE) {
-                    _selectedShader += 1;
-                    if (_selectedShader > 1) {
-                        _selectedShader = 0;
-                    }
+                // Left-Right
+                if (e.key.keysym.sym == SDLK_d) {
+                    _camera_positions.x -= 0.1f;
+                } else if (e.key.keysym.sym == SDLK_a) {
+                    _camera_positions.x += 0.1f;
+                }
+                // Front-Back
+                else if (e.key.keysym.sym == SDLK_w) {
+                    _camera_positions.z += 0.1f;
+                } else if (e.key.keysym.sym == SDLK_s) {
+                    _camera_positions.z -= 0.1f;
+                }
+                // Up-Down
+                else if (e.key.keysym.sym == SDLK_q) {
+                    _camera_positions.y += 0.1f;
+                } else if (e.key.keysym.sym == SDLK_e) {
+                    _camera_positions.y -= 0.1f;
                 }
             }
         }
@@ -247,7 +260,7 @@ void VulkanEngine::init_swapchain()
 {
     vkb::SwapchainBuilder swapchainBuilder { _chosen_GPU, _device, _surface };
     vkb::Swapchain vkbSwapchain = swapchainBuilder.use_default_format_selection()
-                                      .set_desired_present_mode(VK_PRESENT_MODE_MAILBOX_KHR)
+                                      .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
                                       .set_desired_extent(_windowExtent.width, _windowExtent.height)
                                       .build()
                                       .value();
@@ -342,16 +355,20 @@ void VulkanEngine::init_commands()
         // btw pools are created and command buffers are allocated to the pools.
     */
     // step 1: create a command pool with the following specifications
+    // no need to put this in the for loop
     VkCommandPoolCreateInfo commandPoolInfo = vkinit::command_pool_create_info(_graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-    VK_CHECK(vkCreateCommandPool(_device, &commandPoolInfo, nullptr, &_commandPool));
 
-    // step 2: create commandBuffers
-    VkCommandBufferAllocateInfo cmdAllocInfo = vkinit::command_buffer_allocate_info(_commandPool, 1);
-    VK_CHECK(vkAllocateCommandBuffers(_device, &cmdAllocInfo, &_mainCommandBuffer));
+    for (int i = 0; i < FRAME_OVERLAP; i++) {
+        VK_CHECK(vkCreateCommandPool(_device, &commandPoolInfo, nullptr, &_frames[i]._commandPool));
 
-    _mainDeletionQueue.push_function([=]() {
-        vkDestroyCommandPool(_device, _commandPool, nullptr);
-    });
+        // step 2: create commandBuffers
+        VkCommandBufferAllocateInfo cmdAllocInfo = vkinit::command_buffer_allocate_info(_frames[i]._commandPool, 1);
+        VK_CHECK(vkAllocateCommandBuffers(_device, &cmdAllocInfo, &_frames[i]._mainCommandBuffer));
+
+        _mainDeletionQueue.push_function([=]() {
+            vkDestroyCommandPool(_device, _frames[i]._commandPool, nullptr);
+        });
+    }
 }
 
 //   Init (Render Pass): Init the renderpass
@@ -470,25 +487,26 @@ void VulkanEngine::init_sync_structures()
 
     // wait on it before using it on a GPU command for the first time
     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    for (int i = 0; i < FRAME_OVERLAP; i++) {
+        VK_CHECK(vkCreateFence(_device, &fenceInfo, nullptr, &_frames[i]._fence));
 
-    VK_CHECK(vkCreateFence(_device, &fenceInfo, nullptr, &_render_fence));
+        _mainDeletionQueue.push_function([=]() {
+            vkDestroyFence(_device, _frames[i]._fence, nullptr);
+        });
 
-    _mainDeletionQueue.push_function([=]() {
-        vkDestroyFence(_device, _render_fence, nullptr);
-    });
+        VkSemaphoreCreateInfo semaphoreInfo {};
+        semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+        semaphoreInfo.pNext = nullptr;
+        semaphoreInfo.flags = 0;
 
-    VkSemaphoreCreateInfo semaphoreInfo {};
-    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-    semaphoreInfo.pNext = nullptr;
-    semaphoreInfo.flags = 0;
+        VK_CHECK(vkCreateSemaphore(_device, &semaphoreInfo, nullptr, &_frames[i]._renderSemaphore));
+        VK_CHECK(vkCreateSemaphore(_device, &semaphoreInfo, nullptr, &_frames[i]._presentSemaphore));
 
-    VK_CHECK(vkCreateSemaphore(_device, &semaphoreInfo, nullptr, &_render_semaphore));
-    VK_CHECK(vkCreateSemaphore(_device, &semaphoreInfo, nullptr, &_present_semaphore));
-
-    _mainDeletionQueue.push_function([=]() {
-        vkDestroySemaphore(_device, _render_semaphore, nullptr);
-        vkDestroySemaphore(_device, _present_semaphore, nullptr);
-    });
+        _mainDeletionQueue.push_function([=]() {
+            vkDestroySemaphore(_device, _frames[i]._renderSemaphore, nullptr);
+            vkDestroySemaphore(_device, _frames[i]._presentSemaphore, nullptr);
+        });
+    }
 }
 
 //  Loader (Shader Module): Helper function to load the shader modules
@@ -536,34 +554,12 @@ bool VulkanEngine::load_shader_module(const char* filepath, VkShaderModule* outs
 //      everything that was setup
 void VulkanEngine::init_pipelines()
 {
-    VkShaderModule
-        triangleFragShader,
-        redTriangleFragShader,
-        triangleVertShader, redTriangleVertShader,
-        meshVertShader;
+    VkShaderModule triangleFragShader, meshVertShader;
 
     if (!load_shader_module("../shaders/compiled/triangle_colored.frag.spv", &triangleFragShader)) {
         std::cout << "Failed to create fragment shader." << std::endl;
     } else {
         std::cout << "Successfully created fragment shader." << std::endl;
-    }
-
-    if (!load_shader_module("../shaders/compiled/triangle_colored.vert.spv", &triangleVertShader)) {
-        std::cout << "Failed to create vertex shader." << std::endl;
-    } else {
-        std::cout << "Successfully created vertex shader." << std::endl;
-    }
-
-    if (!load_shader_module("../shaders/compiled/triangle.vert.spv", &redTriangleVertShader)) {
-        std::cout << "Failed to create Red fragment shader." << std::endl;
-    } else {
-        std::cout << "Successfully created Red fragment shader." << std::endl;
-    }
-
-    if (!load_shader_module("../shaders/compiled/triangle.frag.spv", &redTriangleFragShader)) {
-        std::cout << "Failed to create Red vertex shader." << std::endl;
-    } else {
-        std::cout << "Successfully created vertex shader." << std::endl;
     }
 
     if (!load_shader_module("../shaders/compiled/tri_mesh.vert.spv", &meshVertShader)) {
@@ -575,13 +571,9 @@ void VulkanEngine::init_pipelines()
     // not using any desc. sets or anything so it's good for now.
     VkPipelineLayoutCreateInfo pipeline_layout_info = vkinit::pipeline_layout_create_info();
 
-    VK_CHECK(vkCreatePipelineLayout(_device, &pipeline_layout_info, nullptr, &_trianglePipelineLayout));
-
     PipelineBuilder pipelineBuilder;
 
     // Create infos for vertex and fragment shader
-    pipelineBuilder._shaderStages.push_back(
-        vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_VERTEX_BIT, triangleVertShader));
 
     pipelineBuilder._shaderStages.push_back(
         vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_FRAGMENT_BIT, triangleFragShader));
@@ -615,26 +607,10 @@ void VulkanEngine::init_pipelines()
     // color blending
     pipelineBuilder._colorBlendAttachment = vkinit::color_blend_attachment_state();
 
-    // pipeline layout
-    pipelineBuilder._pipelineLayout = _trianglePipelineLayout;
-
     pipelineBuilder._depthStencilInfo = vkinit::depth_stencil_create_info(true, true, VK_COMPARE_OP_LESS_OR_EQUAL);
-
-    // finally.
-    _trianglePipeline = pipelineBuilder.build_pipeline(_device, _renderpass);
 
     //clear the shader stages for the builder
     pipelineBuilder._shaderStages.clear();
-
-    //add the other shaders
-    pipelineBuilder._shaderStages.push_back(
-        vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_VERTEX_BIT, redTriangleVertShader));
-
-    pipelineBuilder._shaderStages.push_back(
-        vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_FRAGMENT_BIT, redTriangleFragShader));
-
-    //build the red triangle pipeline
-    _redTrianglePipeline = pipelineBuilder.build_pipeline(_device, _renderpass);
 
     VertexInputDescription vertexDescription = Vertex::get_vertex_input_desc();
 
@@ -676,19 +652,13 @@ void VulkanEngine::init_pipelines()
 
     //destroy all shader modules, outside of the queue
     vkDestroyShaderModule(_device, meshVertShader, nullptr);
-    vkDestroyShaderModule(_device, redTriangleVertShader, nullptr);
-    vkDestroyShaderModule(_device, redTriangleFragShader, nullptr);
     vkDestroyShaderModule(_device, triangleFragShader, nullptr);
-    vkDestroyShaderModule(_device, triangleVertShader, nullptr);
 
     _mainDeletionQueue.push_function([=]() {
         //destroy the 2 pipelines we have created
-        vkDestroyPipeline(_device, _redTrianglePipeline, nullptr);
-        vkDestroyPipeline(_device, _trianglePipeline, nullptr);
         vkDestroyPipeline(_device, _meshPipeline, nullptr);
 
         //destroy the pipeline layout that they use
-        vkDestroyPipelineLayout(_device, _trianglePipelineLayout, nullptr);
         vkDestroyPipelineLayout(_device, _meshPipelineLayout, nullptr);
     });
 }
@@ -813,7 +783,7 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
 {
     // make a model view martix for rendering the object
     // camerea view
-    glm::vec3 cameraPos = { 0.0f, -.6f, -10.0f };
+    glm::vec3 cameraPos = _camera_positions;
     glm::mat4 view = glm::translate(glm::mat4 { 1.0f }, cameraPos);
 
     // camera projection
@@ -861,4 +831,12 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
         // btw 1 there means that we need 1 instance of that draw call
         vkCmdDraw(cmd, object.mesh->_vertices.size(), 1, 0, 0);
     }
+}
+
+FrameData& VulkanEngine::get_current_frame()
+{
+    // Every time we render a frame, the _frameNumber gets bumped by 1.
+    // This will be very useful here. With a frame overlap of 2 (the default),
+    // it means that even frames will use _frames[0], while odd frames will use _frames[1].
+    return _frames[_frameNumber % FRAME_OVERLAP];
 }

@@ -7,7 +7,8 @@
                 "${workspaceFolder}/deps/vk-bootstrap/src",
                 "/usr/lib/gcc/x86_64-redhat-linux/11/include",
                 "/usr/include/c++/11",
-                "/usr/include"
+                "/usr/include",
+                "${workspaceFolder}"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/gcc",
