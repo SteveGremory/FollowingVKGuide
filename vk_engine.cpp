@@ -21,6 +21,14 @@
 
 // TODO: Make function documentation better by specifying args and their purposes
 
+/*
+    The descriptor set number 0 will be used for engine-global resources, and bound once per frame. 
+    The descriptor set number 1 will be used for per-pass resources, and bound once per pass. 
+    The descriptor set number 2 will be used for material resources, 
+    and the number 3 will be used for per-object resources. 
+    This way, the inner render loops will only be binding descriptor sets 2 and 3, and performance will be high.
+*/
+
 #define VK_CHECK(x)                                                     \
     do {                                                                \
         VkResult err = x;                                               \
@@ -52,9 +60,11 @@ void VulkanEngine::init()
     init_default_renderpass();
     init_framebuffers();
     init_sync_structures();
+    init_descriptors();
     init_pipelines();
     load_meshes();
     init_scene();
+
     //everything went fine
     _isInitialized = true;
 }
@@ -262,7 +272,7 @@ void VulkanEngine::init_swapchain()
 {
     vkb::SwapchainBuilder swapchainBuilder { _chosen_GPU, _device, _surface };
     vkb::Swapchain vkbSwapchain = swapchainBuilder.use_default_format_selection()
-                                      .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
+                                      .set_desired_present_mode(VK_PRESENT_MODE_MAILBOX_KHR)
                                       .set_desired_extent(_windowExtent.width, _windowExtent.height)
                                       .build()
                                       .value();
@@ -626,16 +636,19 @@ void VulkanEngine::init_pipelines()
     // remove the old shaders and make way for the new ones. Liberal moment.
     pipelineBuilder._shaderStages.clear();
 
-    // start with a default, empty layout info
-    VkPipelineLayoutCreateInfo mesh_pipeline_layout_info = vkinit::pipeline_layout_create_info();
-
     VkPushConstantRange pushConstantRange {};
     pushConstantRange.offset = 0; // first member in struct
     pushConstantRange.size = sizeof(MeshPushConstants);
     pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT; // because the mesh shader is a vertex shader
 
-    mesh_pipeline_layout_info.pPushConstantRanges = &pushConstantRange;
+    // start with a default, empty layout info
+    VkPipelineLayoutCreateInfo mesh_pipeline_layout_info = vkinit::pipeline_layout_create_info();
+
     mesh_pipeline_layout_info.pushConstantRangeCount = 1;
+    mesh_pipeline_layout_info.pPushConstantRanges = &pushConstantRange;
+
+    mesh_pipeline_layout_info.setLayoutCount = 1;
+    mesh_pipeline_layout_info.pSetLayouts = &_globalSetLayout;
 
     // add the other shaders
     pipelineBuilder._shaderStages.push_back(
@@ -793,6 +806,18 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
     // make whatever this is a negative value, fuck knows why
     projection[1][1] *= -1;
 
+    // allocate the uniform buffer
+    GPUCameraData cameraData;
+    cameraData.projection = projection;
+    cameraData.view = view;
+    cameraData.viewproj = projection * view;
+
+    // aaaaand set it over
+    void* data;
+    vmaMapMemory(_allocator, get_current_frame().cameraBuffer._allocation, &data);
+    memcpy(data, &cameraData, sizeof(GPUCameraData));
+    vmaUnmapMemory(_allocator, get_current_frame().cameraBuffer._allocation);
+
     Mesh* lastMesh = nullptr;
     Material* lastMaterial = nullptr;
 
@@ -812,6 +837,8 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
         if (object.material != lastMaterial) {
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, object.material->pipeline);
             lastMaterial = object.material;
+            // Bind the desc set when changing the pipeline
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, object.material->pipelineLayout, 0, 1, &get_current_frame().globalDescriptorSet, 0, nullptr);
         }
 
         glm::mat4 model = object.transformMatrix;
@@ -819,7 +846,7 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
         glm::mat4 mesh_matrix = projection * view * model;
 
         MeshPushConstants constants;
-        constants.render_matrix = mesh_matrix;
+        constants.render_matrix = object.transformMatrix;
 
         // upload the mesh to the GPU via push constants
         vkCmdPushConstants(cmd, object.material->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants), &constants);
@@ -835,6 +862,9 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
     }
 }
 
+//  Helper (Multiple Buffers): use this to get the current frame
+//      example: if you're double buffering, you can use this function to get
+//      the number of the frame being rendered right now.
 FrameData& VulkanEngine::get_current_frame()
 {
     // Every time we render a frame, the _frameNumber gets bumped by 1.
@@ -842,3 +872,103 @@ FrameData& VulkanEngine::get_current_frame()
     // it means that even frames will use _frames[0], while odd frames will use _frames[1].
     return _frames[_frameNumber % FRAME_OVERLAP];
 }
+
+//  Helper (Allocator): Allocates a buffer with the given requirements.
+AllocatedBuffer VulkanEngine::create_buffer(size_t allocsize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage)
+{
+    VkBufferCreateInfo bufferInfo {};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.pNext = nullptr;
+
+    bufferInfo.size = allocsize;
+    bufferInfo.usage = usage;
+
+    VmaAllocationCreateInfo allocInfo {};
+    allocInfo.usage = memoryUsage;
+
+    AllocatedBuffer newBuffer;
+
+    // Allocate the buffer
+    VK_CHECK(vmaCreateBuffer(_allocator, &bufferInfo, &allocInfo, &newBuffer._buffer, &newBuffer._allocation, nullptr));
+
+    return newBuffer;
+}
+
+// Init (Descriptors)
+void VulkanEngine::init_descriptors()
+{
+    std::vector<VkDescriptorPoolSize> sizes {
+        // gimme 10 uniform buffer descriptors bro
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10 }
+    };
+
+    VkDescriptorPoolCreateInfo descPoolInfo {};
+    descPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    descPoolInfo.pNext = nullptr;
+
+    descPoolInfo.maxSets = 10;
+    descPoolInfo.flags = 0;
+
+    descPoolInfo.poolSizeCount = (uint32_t)sizes.size();
+    descPoolInfo.pPoolSizes = sizes.data();
+
+    vkCreateDescriptorPool(_device, &descPoolInfo, nullptr, &_descriptorPool);
+
+    VkDescriptorSetLayoutBinding cameraBinding {};
+    // the position to bind to in the description set
+    cameraBinding.binding = 0;
+    // gimme 1 of those please
+    cameraBinding.descriptorCount = 1;
+    // being used for a uniform buffer
+    cameraBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    // Getting used in the vertex shader
+    cameraBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    VkDescriptorSetLayoutCreateInfo descSetLayoutInfo {};
+    descSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    descSetLayoutInfo.pNext = nullptr;
+
+    // How many were there? (bindings)
+    descSetLayoutInfo.bindingCount = 1;
+    // which one to use
+    descSetLayoutInfo.pBindings = &cameraBinding;
+    // no flags
+    descSetLayoutInfo.flags = 0;
+
+    vkCreateDescriptorSetLayout(_device, &descSetLayoutInfo, nullptr, &_globalSetLayout);
+
+    for (int i = 0; i < FRAME_OVERLAP; i++) {
+        _frames[i].cameraBuffer = create_buffer(sizeof(GPUCameraData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+
+        // Allocate the descriptor created for the current frame
+        VkDescriptorSetAllocateInfo allocInfo {};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.pNext = nullptr;
+
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.descriptorPool = _descriptorPool;
+
+        allocInfo.pSetLayouts = &_globalSetLayout;
+
+        vkAllocateDescriptorSets(_device, &allocInfo, &_frames[i].globalDescriptorSet);
+
+        // Info about the buffer we want to point at in the descriptor
+        VkDescriptorBufferInfo bufferInfo {};
+        bufferInfo.buffer = _frames[i].cameraBuffer._buffer;
+        bufferInfo.offset = 0;
+        bufferInfo.range = sizeof(GPUCameraData);
+
+        VkWriteDescriptorSet setWrite {};
+        setWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        setWrite.pNext = nullptr;
+
+        setWrite.descriptorCount = 1;
+        setWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+
+        setWrite.pBufferInfo = &bufferInfo;
+        setWrite.dstBinding = 0;
+        setWrite.dstSet = _frames[i].globalDescriptorSet;
+
+        vkUpdateDescriptorSets(_device, 1, &setWrite, 0, nullptr);
+    }
+};

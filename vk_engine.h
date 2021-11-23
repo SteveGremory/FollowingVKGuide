@@ -13,6 +13,8 @@
 #include <vk_mesh.h>
 #include <vk_types.h>
 
+constexpr unsigned int FRAME_OVERLAP = 2;
+
 struct MeshPushConstants {
     glm::vec4 data;
     glm::mat4 render_matrix;
@@ -61,15 +63,23 @@ struct RenderObject {
     glm::mat4 transformMatrix;
 };
 
+struct GPUCameraData {
+    glm::mat4 view;
+    glm::mat4 projection;
+    glm::mat4 viewproj;
+};
+
 struct FrameData {
     VkSemaphore _presentSemaphore, _renderSemaphore;
     VkFence _fence;
 
     VkCommandPool _commandPool;
     VkCommandBuffer _mainCommandBuffer;
-};
 
-constexpr unsigned int FRAME_OVERLAP = 2;
+    // Allocated buffer that holds a singleG GPUCameraData
+    AllocatedBuffer cameraBuffer;
+    VkDescriptorSet globalDescriptorSet;
+};
 
 class VulkanEngine {
 public:
@@ -120,8 +130,13 @@ public:
     // Format of the depth image
     VkFormat _depthImageFormat;
 
+    // Descriptor set pool
+    VkDescriptorPool _descriptorPool;
+    // Descriptor set layout
+    VkDescriptorSetLayout _globalSetLayout;
     // Objects to be rendered
-    std::vector<RenderObject> _renderables;
+    std::vector<RenderObject>
+        _renderables;
     // Hashmap of materials
     std::unordered_map<std::string, Material> _materials;
     // Hashmap of meshes
@@ -175,11 +190,15 @@ private:
     void init_pipelines();
     // Init the scene
     void init_scene();
+    // Init descriptors
+    void init_descriptors();
+
     // load the shader module from the filepath
     bool load_shader_module(const char* filepath, VkShaderModule* outshaderModule);
     // get them models
     void load_meshes();
-
+    // Create a (general) buffer
+    AllocatedBuffer create_buffer(size_t allocsize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
     // upload the meshes to the pipeline
     void upload_mesh(Mesh& mesh);
 };
