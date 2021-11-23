@@ -67,6 +67,7 @@ struct GPUCameraData {
     glm::mat4 view;
     glm::mat4 projection;
     glm::mat4 viewproj;
+    glm::mat4 rotation;
 };
 
 struct FrameData {
@@ -150,6 +151,7 @@ public:
     struct SDL_Window* _window { nullptr };
 
     glm::vec3 _camera_positions;
+    float _rotation = 0.0f;
 
     //
     // Public Functions:

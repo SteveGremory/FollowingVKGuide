@@ -190,10 +190,10 @@ void VulkanEngine::run()
                 bQuit = true;
             else if (e.type == SDL_KEYDOWN) {
                 // Left-Right
-                if (e.key.keysym.sym == SDLK_d) {
-                    _camera_positions.x -= 0.1f;
-                } else if (e.key.keysym.sym == SDLK_a) {
+                if (e.key.keysym.sym == SDLK_a) {
                     _camera_positions.x += 0.1f;
+                } else if (e.key.keysym.sym == SDLK_d) {
+                    _camera_positions.x -= 0.1f;
                 }
                 // Front-Back
                 else if (e.key.keysym.sym == SDLK_w) {
@@ -206,6 +206,12 @@ void VulkanEngine::run()
                     _camera_positions.y += 0.1f;
                 } else if (e.key.keysym.sym == SDLK_e) {
                     _camera_positions.y -= 0.1f;
+                }
+                // Rotate right-left
+                else if (e.key.keysym.sym == SDLK_x) {
+                    _rotation += 0.1f;
+                } else if (e.key.keysym.sym == SDLK_z) {
+                    _rotation -= 0.1f;
                 }
             }
         }
@@ -798,19 +804,26 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
 {
     // make a model view martix for rendering the object
     // camerea view
-    glm::vec3 cameraPos = _camera_positions;
+    glm::vec3 cameraPos = (_camera_positions);
     glm::mat4 view = glm::translate(glm::mat4 { 1.0f }, cameraPos);
 
     // camera projection
-    glm::mat4 projection = glm::perspective(glm::radians(70.0f), 1700.0f / 900.0f, 0.1f, 200.0f);
-    // make whatever this is a negative value, fuck knows why
+    glm::mat4 projection = glm::perspective(glm::radians(70.0f), (float)_windowExtent.width / (float)_windowExtent.height, 0.1f, 200.0f);
+
+    // // make whatever this is a negative value, fuck knows why
+    // // ohhh so i did this to fix the darn vulkan BS
+    // i still do not know what this is
     projection[1][1] *= -1;
+    // rotate only z axis
+    glm::mat4 rotation = glm::rotate(_rotation, glm::vec3(0, 1, 0));
+    std::cout << cameraPos.x << '\t' << cameraPos.y << '\t' << cameraPos.z << std::endl;
 
     // allocate the uniform buffer
     GPUCameraData cameraData;
     cameraData.projection = projection;
     cameraData.view = view;
-    cameraData.viewproj = projection * view;
+    cameraData.rotation = rotation;
+    cameraData.viewproj = projection * rotation * view;
 
     // aaaaand set it over
     void* data;
