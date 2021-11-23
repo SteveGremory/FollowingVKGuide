@@ -10,6 +10,6 @@
 [submodule "deps/glm"]
 	path = deps/glm
 	url = https://github.com/g-truc/glm.git
-[submodule "deps/SDL"]
-	path = deps/SDL
-	url = https://github.com/libsdl-org/SDL.git
+[submodule "deps/imgui"]
+	path = deps/imgui
+	url = https://github.com/ocornut/imgui

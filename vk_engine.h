@@ -131,7 +131,7 @@ public:
     bool _isInitialized { false };
     int _frameNumber { 0 };
     int _selectedShader { 0 };
-    VkExtent2D _windowExtent { 1280, 768 };
+    VkExtent2D _windowExtent { 1366, 768 };
     struct SDL_Window* _window { nullptr };
 
     glm::vec3 _camera_positions;
@@ -179,6 +179,7 @@ private:
     bool load_shader_module(const char* filepath, VkShaderModule* outshaderModule);
     // get them models
     void load_meshes();
+
     // upload the meshes to the pipeline
     void upload_mesh(Mesh& mesh);
 };

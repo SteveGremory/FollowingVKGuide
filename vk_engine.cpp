@@ -5,16 +5,19 @@
 #include <fstream>
 #include <iostream>
 
-#include <SDL.h>
-#include <SDL_vulkan.h>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_vulkan.h>
 
 #include <glm/glm.hpp>
 #include <glm/gtx/transform.hpp>
 
 #include "VkBootstrap.h"
-#include "vk_mem_alloc.h"
 #include <vk_initializers.h>
 #include <vk_types.h>
+
+#include <backends/imgui_impl_sdl.h>
+#include <backends/imgui_impl_vulkan.h>
+#include <imgui.h>
 
 // TODO: Make function documentation better by specifying args and their purposes
 
@@ -52,7 +55,6 @@ void VulkanEngine::init()
     init_pipelines();
     load_meshes();
     init_scene();
-
     //everything went fine
     _isInitialized = true;
 }
@@ -113,7 +115,6 @@ void VulkanEngine::draw()
     // now. we. do.
 
     draw_objects(cmd, _renderables.data(), _renderables.size());
-
     // finalize and end the render pass
     vkCmdEndRenderPass(cmd);
 
@@ -198,6 +199,7 @@ void VulkanEngine::run()
                 }
             }
         }
+
         draw();
     }
 }
@@ -674,14 +676,14 @@ void VulkanEngine::load_meshes()
     _triangleMesh._vertices[1].position = { -0.5f, 0.5f, 0.0f };
     _triangleMesh._vertices[2].position = { 0.f, -0.5f, 0.0f };
 
-    //vertex colors, all green
+    // She's like a rainbow!
     _triangleMesh._vertices[0].color = { 0.1f, 1.0f, 0.1f };
-    _triangleMesh._vertices[1].color = { 1.0f, 0.1f, 0.1f };
+    _triangleMesh._vertices[1].color = { 1.0f, 1.0f, 0.1f };
     _triangleMesh._vertices[2].color = { 0.1f, 0.1f, 1.0f };
 
     // we don't care about the vertex normals
 
-    _monkeyMesh.load_from_obj("../models/high_poly_suzanne.obj");
+    _monkeyMesh.load_from_obj("../models/audi.obj");
     upload_mesh(_triangleMesh);
     upload_mesh(_monkeyMesh);
 
