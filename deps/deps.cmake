@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.14)
 
+find_package(Vulkan REQUIRED)
+find_package(SDL2 REQUIRED)
+
 include(${CMAKE_SOURCE_DIR}/cmake/imgui.cmake)
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/deps/vk-bootstrap)

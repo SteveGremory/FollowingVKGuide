@@ -29,6 +29,3 @@ set_target_properties(Main PROPERTIES
 target_include_directories(Main PUBLIC "${CMAKE_SOURCE_DIR}" ${VULKAN_HADERS_INCLUDE_DIRS} ${DEPS_INCLUDE_DIRS})
 target_link_libraries(Main vk-bootstrap VulkanMemoryAllocator glm::glm tinyobjloader ImGUI)
 target_link_libraries(Main Vulkan::Vulkan SDL2::SDL2)
-
-find_package(Vulkan REQUIRED)
-find_package(SDL2 REQUIRED)

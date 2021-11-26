@@ -278,7 +278,7 @@ void VulkanEngine::init_swapchain()
 {
     vkb::SwapchainBuilder swapchainBuilder { _chosen_GPU, _device, _surface };
     vkb::Swapchain vkbSwapchain = swapchainBuilder.use_default_format_selection()
-                                      .set_desired_present_mode(VK_PRESENT_MODE_MAILBOX_KHR)
+                                      .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
                                       .set_desired_extent(_windowExtent.width, _windowExtent.height)
                                       .build()
                                       .value();
@@ -617,6 +617,8 @@ void VulkanEngine::init_pipelines()
     pipelineBuilder._scissor.extent = _windowExtent;
 
     // Tell the rasterizer that we wanna fill the objects
+    // Wireframe Mode: VK_POLYGON_MODE_LINE
+    // Solid Mode: VK_POLYGON_MODE_FILL
     pipelineBuilder._rasterizer = vkinit::rasterization_state_create_info(VK_POLYGON_MODE_FILL);
 
     // MSAA
@@ -815,8 +817,10 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
     // i still do not know what this is
     projection[1][1] *= -1;
     // rotate only z axis
-    glm::mat4 rotation = glm::rotate(_rotation, glm::vec3(0, 1, 0));
-    std::cout << cameraPos.x << '\t' << cameraPos.y << '\t' << cameraPos.z << std::endl;
+    glm::vec3 rotation_vector = glm::vec3(0, 1, 0);
+    //todo: check out how glm::rotate actually works.
+    glm::mat4 rotation = glm::rotate(_rotation, rotation_vector);
+    std::cout << rotation_vector.x << '\t' << rotation_vector.y << '\t' << rotation_vector.z << '\t' << std::endl;
 
     // allocate the uniform buffer
     GPUCameraData cameraData;
@@ -903,6 +907,10 @@ AllocatedBuffer VulkanEngine::create_buffer(size_t allocsize, VkBufferUsageFlags
 
     // Allocate the buffer
     VK_CHECK(vmaCreateBuffer(_allocator, &bufferInfo, &allocInfo, &newBuffer._buffer, &newBuffer._allocation, nullptr));
+
+    _mainDeletionQueue.push_function([&] {
+        vmaDestroyBuffer(_allocator, newBuffer._buffer, newBuffer._allocation);
+    });
 
     return newBuffer;
 }
