@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.14)
 project(VulkanGuide)
 
+## Testing verified commits
+
 # For all the dependencies
 include(deps/deps.cmake)
 # For compiling shaders
