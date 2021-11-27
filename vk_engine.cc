@@ -120,6 +120,17 @@ void VulkanEngine::draw()
     // begin the render pass
     vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
 
+    VkViewport viewport {};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = static_cast<float>(_windowExtent.width);
+    viewport.height = static_cast<float>(_windowExtent.height);
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    VkRect2D scissor { { 0, 0 }, _windowExtent };
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
+
     // i'll just keep this for the keks, kekw:
     // record???? wtf??? where??? yes now i know, because we didn't have the pipeline back then
     // now. we. do.
@@ -339,6 +350,9 @@ void VulkanEngine::init_swapchain()
     _mainDeletionQueue.push_function([=]() {
         vkDestroyImageView(_device, _depthImageView, nullptr);
         vmaDestroyImage(_allocator, _depthImage._image, _depthImage._allocation);
+
+        vkDestroyImageView(_device, _resolveImageView, nullptr);
+        vmaDestroyImage(_allocator, _resolveImage._image, _resolveImage._allocation);
     });
 }
 
@@ -636,17 +650,6 @@ void VulkanEngine::init_pipelines()
     // VK_PRIMITIVE_TOPOLOGY_POINT_LIST    : points
     // VK_PRIMITIVE_TOPOLOGY_LINE_LIST     : line-list
     pipelineBuilder._inputAssembly = vkinit::input_assembly_create_info(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-
-    //build viewport and scissor from the swapchain extents
-    pipelineBuilder._viewport.x = 0.0f;
-    pipelineBuilder._viewport.y = 0.0f;
-    pipelineBuilder._viewport.width = (float)_windowExtent.width;
-    pipelineBuilder._viewport.height = (float)_windowExtent.height;
-    pipelineBuilder._viewport.minDepth = 0.0f;
-    pipelineBuilder._viewport.maxDepth = 1.0f;
-
-    pipelineBuilder._scissor.offset = { 0, 0 };
-    pipelineBuilder._scissor.extent = _windowExtent;
 
     // Tell the rasterizer that we wanna fill the objects
     // Wireframe Mode: VK_POLYGON_MODE_LINE

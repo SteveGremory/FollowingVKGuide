@@ -141,8 +141,8 @@ VkPipeline PipelineBuilder::build_pipeline(VkDevice device, VkRenderPass pass)
     viewportState.viewportCount = 1;
     viewportState.scissorCount = 1;
 
-    viewportState.pScissors = &_scissor;
-    viewportState.pViewports = &_viewport;
+    viewportState.pScissors = nullptr;
+    viewportState.pViewports = nullptr;
 
     // setup color blending, no transparency
     // it literally says, "no blend bro" but we still do it for some god awful reason
@@ -155,6 +155,13 @@ VkPipeline PipelineBuilder::build_pipeline(VkDevice device, VkRenderPass pass)
 
     colorBlendStateInfo.attachmentCount = 1;
     colorBlendStateInfo.pAttachments = &_colorBlendAttachment;
+
+    _dynamicStateEnables = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+
+    _dynamicStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    _dynamicStateInfo.pDynamicStates = _dynamicStateEnables.data();
+    _dynamicStateInfo.dynamicStateCount = _dynamicStateEnables.size();
+    _dynamicStateInfo.flags = 0;
 
     // finally, build the actual pipeline
     VkGraphicsPipelineCreateInfo pipelineInfo {};
@@ -174,6 +181,7 @@ VkPipeline PipelineBuilder::build_pipeline(VkDevice device, VkRenderPass pass)
     pipelineInfo.subpass = 0;
     pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
     pipelineInfo.pDepthStencilState = &_depthStencilInfo;
+    pipelineInfo.pDynamicState = &_dynamicStateInfo;
 
     VkPipeline newPipeline;
     if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &newPipeline) != VK_SUCCESS) {

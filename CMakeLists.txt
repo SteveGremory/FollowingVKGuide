@@ -8,7 +8,7 @@ include(deps/deps.cmake)
 # For compiling shaders
 include(cmake/shaders.cmake)
 
-set(CMAKE_BUILD_TYPE Release)
+set(CMAKE_BUILD_TYPE Debug)
 
 # Add source to this project's executable.
 file(GLOB SOURCES *.cc *.hh)
