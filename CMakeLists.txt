@@ -8,17 +8,11 @@ include(deps/deps.cmake)
 # For compiling shaders
 include(cmake/shaders.cmake)
 
+set(CMAKE_BUILD_TYPE Release)
+
 # Add source to this project's executable.
-add_executable (Main 
-    main.cpp
-    vk_engine.cpp
-    vk_engine.h
-    vk_types.h
-    vk_initializers.cpp
-    vk_initializers.h
-    vk_mesh.h
-    vk_mesh.cpp
-)
+file(GLOB SOURCES *.cc *.hh)
+add_executable (Main ${SOURCES})
 
 # Use clang and lincxx
 set_target_properties(Main PROPERTIES
