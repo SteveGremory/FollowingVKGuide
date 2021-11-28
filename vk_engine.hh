@@ -136,7 +136,7 @@ public:
     AllocatedImage _resolveImage;
 
     // Samples for MSAA
-    VkSampleCountFlagBits _sampleCount = VK_SAMPLE_COUNT_64_BIT;
+    VkSampleCountFlagBits _sampleCount;
 
     // Descriptor set pool
     VkDescriptorPool _descriptorPool;
@@ -208,8 +208,9 @@ private:
     void cleanupSwapChain();
 
     // load the shader module from the filepath
-    bool
-    load_shader_module(const char* filepath, VkShaderModule* outshaderModule);
+    bool load_shader_module(const char* filepath, VkShaderModule* outshaderModule);
+    // Get the max sample count available
+    VkSampleCountFlagBits get_max_usable_sample_count();
     // get them models
     void load_meshes();
     // Create a (general) buffer

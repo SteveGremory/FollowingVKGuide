@@ -291,9 +291,44 @@ void VulkanEngine::init_vulkan()
     allocatorInfo.instance = _instance;
     vmaCreateAllocator(&allocatorInfo, &_allocator);
 
+    _sampleCount = get_max_usable_sample_count();
+
     _mainDeletionQueue.push_function([&]() {
         vmaDestroyAllocator(_allocator);
     });
+}
+
+VkSampleCountFlagBits VulkanEngine::get_max_usable_sample_count()
+{
+    VkPhysicalDeviceProperties physicalDeviceProperties;
+    vkGetPhysicalDeviceProperties(_chosen_GPU, &physicalDeviceProperties);
+
+    VkSampleCountFlags counts = physicalDeviceProperties.limits.framebufferColorSampleCounts & physicalDeviceProperties.limits.framebufferDepthSampleCounts;
+    if (counts & VK_SAMPLE_COUNT_64_BIT) {
+        std::cout << "Max Sample Count Available: "
+                  << "VK_SAMPLE_COUNT_64_BIT" << std::endl;
+        return VK_SAMPLE_COUNT_64_BIT;
+    } else if (counts & VK_SAMPLE_COUNT_32_BIT) {
+        std::cout << "Max Sample Count Available: "
+                  << "VK_SAMPLE_COUNT_64_BIT" << std::endl;
+        return VK_SAMPLE_COUNT_32_BIT;
+    } else if (counts & VK_SAMPLE_COUNT_16_BIT) {
+        std::cout << "Max Sample Count Available: "
+                  << "VK_SAMPLE_COUNT_64_BIT" << std::endl;
+        return VK_SAMPLE_COUNT_16_BIT;
+    } else if (counts & VK_SAMPLE_COUNT_8_BIT) {
+        std::cout << "Max Sample Count Available: "
+                  << "VK_SAMPLE_COUNT_64_BIT" << std::endl;
+        return VK_SAMPLE_COUNT_8_BIT;
+    } else if (counts & VK_SAMPLE_COUNT_4_BIT) {
+        std::cout << "Max Sample Count Available: "
+                  << "VK_SAMPLE_COUNT_64_BIT" << std::endl;
+        return VK_SAMPLE_COUNT_4_BIT;
+    } else if (counts & VK_SAMPLE_COUNT_2_BIT) {
+        std::cout << "Max Sample Count Available: "
+                  << "VK_SAMPLE_COUNT_64_BIT" << std::endl;
+        return VK_SAMPLE_COUNT_2_BIT;
+    }
 }
 
 //  Init (Swapchain): Init the swapchain and the memory allocator
@@ -358,6 +393,9 @@ void VulkanEngine::init_swapchain()
     // build an image view for the depth buffer to use for rendering
     VkImageViewCreateInfo resolve_view_info = vkinit::create_image_view_info(_swapchain_image_format, _resolveImage._image, VK_IMAGE_ASPECT_COLOR_BIT);
     VK_CHECK(vkCreateImageView(_device, &resolve_view_info, nullptr, &_resolveImageView));
+
+    VkPhysicalDeviceProperties physicalDeviceProperties;
+    vkGetPhysicalDeviceProperties(_chosen_GPU, &physicalDeviceProperties);
 
     _mainDeletionQueue.push_function([=]() {
         vkDestroyImageView(_device, _depthImageView, nullptr);
@@ -751,7 +789,7 @@ void VulkanEngine::load_meshes()
 
     // we don't care about the vertex normals
 
-    _monkeyMesh.load_from_obj("../models/high_poly_suzanne.obj");
+    _monkeyMesh.load_from_obj("../models/audi.obj");
     upload_mesh(_triangleMesh);
     upload_mesh(_monkeyMesh);
 
@@ -977,6 +1015,10 @@ void VulkanEngine::init_descriptors()
 
     vkCreateDescriptorPool(_device, &descPoolInfo, nullptr, &_descriptorPool);
 
+    _mainDeletionQueue.push_function([&] {
+        vkDestroyDescriptorPool(_device, _descriptorPool, nullptr);
+    });
+
     VkDescriptorSetLayoutBinding cameraBinding {};
     // the position to bind to in the description set
     cameraBinding.binding = 0;
@@ -999,6 +1041,9 @@ void VulkanEngine::init_descriptors()
     descSetLayoutInfo.flags = 0;
 
     vkCreateDescriptorSetLayout(_device, &descSetLayoutInfo, nullptr, &_globalSetLayout);
+    _mainDeletionQueue.push_function([&] {
+        vkDestroyDescriptorSetLayout(_device, _globalSetLayout, nullptr);
+    });
 
     for (int i = 0; i < FRAME_OVERLAP; i++) {
         _frames[i].cameraBuffer = create_buffer(sizeof(GPUCameraData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
