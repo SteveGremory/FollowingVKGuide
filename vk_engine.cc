@@ -78,7 +78,10 @@ void VulkanEngine::draw()
 
     //request image from the swapchain, one second timeout
     uint32_t swapchainImageIndex;
-    VK_CHECK(vkAcquireNextImageKHR(_device, _swapchain, 1000000000, get_current_frame()._presentSemaphore, nullptr, &swapchainImageIndex));
+    auto result = vkAcquireNextImageKHR(_device, _swapchain, 1000000000, get_current_frame()._presentSemaphore, nullptr, &swapchainImageIndex);
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        //recreate_swapchain();
+    }
     VK_CHECK(vkResetCommandBuffer(get_current_frame()._mainCommandBuffer, 0));
 
     VkCommandBuffer cmd = get_current_frame()._mainCommandBuffer;
@@ -180,7 +183,12 @@ void VulkanEngine::draw()
 
     presentInfo.pImageIndices = &swapchainImageIndex;
 
-    VK_CHECK(vkQueuePresentKHR(_graphicsQueue, &presentInfo));
+    auto result_present = vkQueuePresentKHR(_graphicsQueue, &presentInfo);
+    if (result_present == VK_ERROR_OUT_OF_DATE_KHR || result_present == VK_SUBOPTIMAL_KHR || _wasResized) {
+        _wasResized = false;
+        //recreate_swapchain();
+        return;
+    }
 
     //increase the number of frames drawn
     _frameNumber++;
@@ -197,9 +205,13 @@ void VulkanEngine::run()
         //Handle events on queue
         while (SDL_PollEvent(&e) != 0) {
             //close the window when user alt-f4s or clicks the X button
-            if (e.type == SDL_QUIT)
+            if (e.type == SDL_QUIT) {
                 bQuit = true;
-            else if (e.type == SDL_KEYDOWN) {
+            } else if (e.type == SDL_WINDOWEVENT) {
+                if (e.window.event == SDL_WINDOWEVENT_RESIZED) {
+                    _wasResized = true;
+                }
+            } else if (e.type == SDL_KEYDOWN) {
                 // Left-Right
                 if (e.key.keysym.sym == SDLK_a) {
                     _camera_positions.x += 0.1f;
@@ -324,7 +336,7 @@ void VulkanEngine::init_swapchain()
     _depthImageFormat = VK_FORMAT_D32_SFLOAT;
 
     // same depth format usage flag
-    VkImageCreateInfo dimg_info = vkinit::create_image_info(_depthImageFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, depthImageExtent);
+    VkImageCreateInfo dimg_info = vkinit::create_image_info(_depthImageFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, depthImageExtent, _sampleCount);
     // for the depth image, we want to alloc it from the GPU's memory
     VmaAllocationCreateInfo depth_buffer_allocation_info {};
     depth_buffer_allocation_info.usage = VMA_MEMORY_USAGE_GPU_ONLY;
@@ -336,7 +348,7 @@ void VulkanEngine::init_swapchain()
     VK_CHECK(vkCreateImageView(_device, &dview_info, nullptr, &_depthImageView));
 
     // same depth format usage flag
-    VkImageCreateInfo resolve_info = vkinit::create_image_info(_swapchain_image_format, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, resolveImageExtent);
+    VkImageCreateInfo resolve_info = vkinit::create_image_info(_swapchain_image_format, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, resolveImageExtent, _sampleCount);
     // for the depth image, we want to alloc it from the GPU's memory
     VmaAllocationCreateInfo resolve_allocation_info {};
     resolve_allocation_info.usage = VMA_MEMORY_USAGE_GPU_ONLY;
@@ -426,7 +438,7 @@ void VulkanEngine::init_default_renderpass()
     // make the images the same format as the swapchain
     color_attachment.format = _swapchain_image_format;
     // single sample, no MSAA 4u, monke.
-    color_attachment.samples = VK_SAMPLE_COUNT_8_BIT;
+    color_attachment.samples = _sampleCount;
     // clear the renderpass if the attachment when loaded
     color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     // keep the attachmant stored when da renderpass be goin home
@@ -446,7 +458,7 @@ void VulkanEngine::init_default_renderpass()
     VkAttachmentDescription depth_attachment {};
     depth_attachment.flags = 0;
     depth_attachment.format = _depthImageFormat;
-    depth_attachment.samples = VK_SAMPLE_COUNT_8_BIT;
+    depth_attachment.samples = _sampleCount;
     depth_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     depth_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     depth_attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -657,7 +669,7 @@ void VulkanEngine::init_pipelines()
     pipelineBuilder._rasterizer = vkinit::rasterization_state_create_info(VK_POLYGON_MODE_FILL);
 
     // MSAA
-    pipelineBuilder._multisampling = vkinit::multisampling_state_create_info();
+    pipelineBuilder._multisampling = vkinit::multisampling_state_create_info(_sampleCount);
 
     // color blending
     pipelineBuilder._colorBlendAttachment = vkinit::color_blend_attachment_state();
@@ -739,7 +751,7 @@ void VulkanEngine::load_meshes()
 
     // we don't care about the vertex normals
 
-    _monkeyMesh.load_from_obj("../models/audi.obj");
+    _monkeyMesh.load_from_obj("../models/high_poly_suzanne.obj");
     upload_mesh(_triangleMesh);
     upload_mesh(_monkeyMesh);
 

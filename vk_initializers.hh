@@ -12,10 +12,10 @@ VkPipelineShaderStageCreateInfo pipeline_shader_stage_create_info(VkShaderStageF
 VkPipelineVertexInputStateCreateInfo vertex_input_stage_create_info();
 VkPipelineInputAssemblyStateCreateInfo input_assembly_create_info(VkPrimitiveTopology topology);
 VkPipelineRasterizationStateCreateInfo rasterization_state_create_info(VkPolygonMode polygonMode);
-VkPipelineMultisampleStateCreateInfo multisampling_state_create_info();
+VkPipelineMultisampleStateCreateInfo multisampling_state_create_info(VkSampleCountFlagBits sampleCount);
 VkPipelineColorBlendAttachmentState color_blend_attachment_state();
 VkPipelineLayoutCreateInfo pipeline_layout_create_info();
-VkImageCreateInfo create_image_info(VkFormat format, VkImageUsageFlags flags, VkExtent3D extent);
+VkImageCreateInfo create_image_info(VkFormat format, VkImageUsageFlags flags, VkExtent3D extent, VkSampleCountFlagBits sampleCount);
 VkImageViewCreateInfo create_image_view_info(VkFormat format, VkImage image, VkImageAspectFlags flags);
 VkPipelineDepthStencilStateCreateInfo depth_stencil_create_info(bool bDepthTest, bool bDepthWrite, VkCompareOp compareOp);
 }

@@ -135,6 +135,9 @@ public:
     VkImageView _resolveImageView;
     AllocatedImage _resolveImage;
 
+    // Samples for MSAA
+    VkSampleCountFlagBits _sampleCount = VK_SAMPLE_COUNT_64_BIT;
+
     // Descriptor set pool
     VkDescriptorPool _descriptorPool;
     // Descriptor set layout
@@ -149,6 +152,7 @@ public:
 
     // SDL related variables
     bool _isInitialized { false };
+    bool _wasResized { false };
     int _frameNumber { 0 };
     int _selectedShader { 0 };
     VkExtent2D _windowExtent { 1366, 768 };
@@ -198,9 +202,14 @@ private:
     void init_scene();
     // Init descriptors
     void init_descriptors();
+    // Recreate Swapchain (for resizing)
+    void recreate_swapchain();
+    // Cleanup Swapchain before recreation
+    void cleanupSwapChain();
 
     // load the shader module from the filepath
-    bool load_shader_module(const char* filepath, VkShaderModule* outshaderModule);
+    bool
+    load_shader_module(const char* filepath, VkShaderModule* outshaderModule);
     // get them models
     void load_meshes();
     // Create a (general) buffer

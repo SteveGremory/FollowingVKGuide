@@ -88,7 +88,7 @@ VkPipelineRasterizationStateCreateInfo vkinit::rasterization_state_create_info(V
     return info;
 }
 
-VkPipelineMultisampleStateCreateInfo vkinit::multisampling_state_create_info()
+VkPipelineMultisampleStateCreateInfo vkinit::multisampling_state_create_info(VkSampleCountFlagBits sampleCount)
 {
     // Copied this as we aren't gonna use multisampling in the tutorial anyways (for now)
     VkPipelineMultisampleStateCreateInfo info {};
@@ -97,7 +97,7 @@ VkPipelineMultisampleStateCreateInfo vkinit::multisampling_state_create_info()
 
     info.sampleShadingEnable = VK_FALSE;
     //multisampling defaulted to no multisampling (1 sample per pixel)
-    info.rasterizationSamples = VK_SAMPLE_COUNT_8_BIT;
+    info.rasterizationSamples = sampleCount;
     info.minSampleShading = 1.0f;
     info.pSampleMask = nullptr;
     info.alphaToCoverageEnable = VK_FALSE;
@@ -192,7 +192,7 @@ VkPipeline PipelineBuilder::build_pipeline(VkDevice device, VkRenderPass pass)
     }
 }
 
-VkImageCreateInfo vkinit::create_image_info(VkFormat format, VkImageUsageFlags flags, VkExtent3D extent)
+VkImageCreateInfo vkinit::create_image_info(VkFormat format, VkImageUsageFlags flags, VkExtent3D extent, VkSampleCountFlagBits sampleCount)
 {
     VkImageCreateInfo info {};
     info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -206,7 +206,8 @@ VkImageCreateInfo vkinit::create_image_info(VkFormat format, VkImageUsageFlags f
     info.mipLevels = 1;
     info.arrayLayers = 1;
     info.usage = flags;
-    info.samples = VK_SAMPLE_COUNT_8_BIT;
+    info.samples = sampleCount;
+
     info.tiling = VK_IMAGE_TILING_OPTIMAL;
 
     return info;
