@@ -247,6 +247,7 @@ void VulkanEngine::run()
 //    GPU drivers and all
 void VulkanEngine::init_vulkan()
 {
+
     vkb::InstanceBuilder builder;
     auto inst_ret = builder.set_app_name("")
                         .request_validation_layers(true)
@@ -291,6 +292,10 @@ void VulkanEngine::init_vulkan()
     allocatorInfo.instance = _instance;
     vmaCreateAllocator(&allocatorInfo, &_allocator);
 
+    // Get the minimum buffer alignment
+    vkGetPhysicalDeviceProperties(_chosen_GPU, &_deviceProperties);
+    std::cout << "The GPU has a minimum buffer alignment of: " << _deviceProperties.limits.minUniformBufferOffsetAlignment << std::endl;
+
     _sampleCount = get_max_usable_sample_count();
 
     _mainDeletionQueue.push_function([&]() {
@@ -300,10 +305,8 @@ void VulkanEngine::init_vulkan()
 
 VkSampleCountFlagBits VulkanEngine::get_max_usable_sample_count()
 {
-    VkPhysicalDeviceProperties physicalDeviceProperties;
-    vkGetPhysicalDeviceProperties(_chosen_GPU, &physicalDeviceProperties);
 
-    VkSampleCountFlags counts = physicalDeviceProperties.limits.framebufferColorSampleCounts & physicalDeviceProperties.limits.framebufferDepthSampleCounts;
+    VkSampleCountFlags counts = _deviceProperties.limits.framebufferColorSampleCounts & _deviceProperties.limits.framebufferDepthSampleCounts;
     if (counts & VK_SAMPLE_COUNT_64_BIT) {
         std::cout << "Max Sample Count Available: "
                   << "VK_SAMPLE_COUNT_64_BIT" << std::endl;
@@ -329,6 +332,7 @@ VkSampleCountFlagBits VulkanEngine::get_max_usable_sample_count()
                   << "VK_SAMPLE_COUNT_64_BIT" << std::endl;
         return VK_SAMPLE_COUNT_2_BIT;
     }
+    return VK_SAMPLE_COUNT_1_BIT;
 }
 
 //  Init (Swapchain): Init the swapchain and the memory allocator
@@ -668,15 +672,15 @@ bool VulkanEngine::load_shader_module(const char* filepath, VkShaderModule* outs
 //      everything that was setup
 void VulkanEngine::init_pipelines()
 {
-    VkShaderModule triangleFragShader, meshVertShader;
+    VkShaderModule meshVertShader, colorMeshShader;
 
-    if (!load_shader_module("../shaders/compiled/triangle_colored.frag.spv", &triangleFragShader)) {
-        std::cout << "Failed to create fragment shader." << std::endl;
+    if (!load_shader_module("../shaders/compiled/tri_mesh.vert.spv", &meshVertShader)) {
+        std::cout << "Failed to create Mesh fragment shader." << std::endl;
     } else {
         std::cout << "Successfully created fragment shader." << std::endl;
     }
 
-    if (!load_shader_module("../shaders/compiled/tri_mesh.vert.spv", &meshVertShader)) {
+    if (!load_shader_module("../shaders/compiled/default_lit.frag.spv", &colorMeshShader)) {
         std::cout << "Failed to create Mesh fragment shader." << std::endl;
     } else {
         std::cout << "Successfully created fragment shader." << std::endl;
@@ -690,7 +694,7 @@ void VulkanEngine::init_pipelines()
     // Create infos for vertex and fragment shader
 
     pipelineBuilder._shaderStages.push_back(
-        vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_FRAGMENT_BIT, triangleFragShader));
+        vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_FRAGMENT_BIT, colorMeshShader));
 
     // tells vulkan how to read vertices, isn't in use rn.
     pipelineBuilder._vertexInputInfo = vkinit::vertex_input_stage_create_info();
@@ -747,9 +751,9 @@ void VulkanEngine::init_pipelines()
     pipelineBuilder._shaderStages.push_back(
         vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_VERTEX_BIT, meshVertShader));
 
-    // make sure that triangleFragShader is holding the compiled colored_triangle.frag
+    // make sure that colorMeshShader is holding the compiled colored_triangle.frag
     pipelineBuilder._shaderStages.push_back(
-        vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_FRAGMENT_BIT, triangleFragShader));
+        vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_FRAGMENT_BIT, colorMeshShader));
 
     VK_CHECK(vkCreatePipelineLayout(_device, &mesh_pipeline_layout_info, nullptr, &_meshPipelineLayout));
 
@@ -760,7 +764,7 @@ void VulkanEngine::init_pipelines()
 
     //destroy all shader modules, outside of the queue
     vkDestroyShaderModule(_device, meshVertShader, nullptr);
-    vkDestroyShaderModule(_device, triangleFragShader, nullptr);
+    vkDestroyShaderModule(_device, colorMeshShader, nullptr);
 
     _mainDeletionQueue.push_function([=]() {
         //destroy the 2 pipelines we have created
@@ -919,6 +923,19 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
     memcpy(data, &cameraData, sizeof(GPUCameraData));
     vmaUnmapMemory(_allocator, get_current_frame().cameraBuffer._allocation);
 
+    // After the camera buffer has been mapped, send the data to the
+    float framed = (_frameNumber / 120.0f);
+
+    _sceneParams.ambientColor = { sin(framed), 0, cos(framed), 1 };
+
+    char* sceneData;
+    vmaMapMemory(_allocator, _sceneParamsBuffer._allocation, (void**)&sceneData);
+
+    int frameIndex = _frameNumber % FRAME_OVERLAP;
+    sceneData += pad_uniform_buffer(sizeof(GPUSceneData)) * frameIndex;
+    memcpy(sceneData, &_sceneParams, sizeof(GPUSceneData));
+    vmaUnmapMemory(_allocator, _sceneParamsBuffer._allocation);
+
     Mesh* lastMesh = nullptr;
     Material* lastMaterial = nullptr;
 
@@ -956,6 +973,14 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
             VkDeviceSize offset = 0;
             vkCmdBindVertexBuffers(cmd, 0, 1, &object.mesh->_vertexBuffer._buffer, &offset);
             lastMesh = object.mesh;
+        }
+
+        if (object.material != lastMaterial) {
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, object.material->pipeline);
+            lastMaterial = object.material;
+
+            uint32_t uniform_offset = pad_uniform_buffer(sizeof(GPUSceneData)) * frameIndex;
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, object.material->pipelineLayout, 0, 1, &get_current_frame().globalDescriptorSet, 1, &uniform_offset);
         }
 
         // btw 1 there means that we need 1 instance of that draw call
@@ -1000,7 +1025,7 @@ void VulkanEngine::init_descriptors()
 {
     std::vector<VkDescriptorPoolSize> sizes {
         // gimme 10 uniform buffer descriptors bro
-        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10 }
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10 }, { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 10 }
     };
 
     VkDescriptorPoolCreateInfo descPoolInfo {};
@@ -1015,35 +1040,24 @@ void VulkanEngine::init_descriptors()
 
     vkCreateDescriptorPool(_device, &descPoolInfo, nullptr, &_descriptorPool);
 
-    _mainDeletionQueue.push_function([&] {
-        vkDestroyDescriptorPool(_device, _descriptorPool, nullptr);
-    });
+    //binding for camera data at 0
+    VkDescriptorSetLayoutBinding cameraBind = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, VK_SHADER_STAGE_VERTEX_BIT, 0);
+    //binding for scene data at 1
+    VkDescriptorSetLayoutBinding sceneBind = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 1);
 
-    VkDescriptorSetLayoutBinding cameraBinding {};
-    // the position to bind to in the description set
-    cameraBinding.binding = 0;
-    // gimme 1 of those please
-    cameraBinding.descriptorCount = 1;
-    // being used for a uniform buffer
-    cameraBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    // Getting used in the vertex shader
-    cameraBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    VkDescriptorSetLayoutBinding bindings[] = { cameraBind, sceneBind };
 
-    VkDescriptorSetLayoutCreateInfo descSetLayoutInfo {};
-    descSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    descSetLayoutInfo.pNext = nullptr;
+    VkDescriptorSetLayoutCreateInfo setinfo = {};
+    setinfo.bindingCount = 2;
+    setinfo.flags = 0;
+    setinfo.pNext = nullptr;
+    setinfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    setinfo.pBindings = bindings;
 
-    // How many were there? (bindings)
-    descSetLayoutInfo.bindingCount = 1;
-    // which one to use
-    descSetLayoutInfo.pBindings = &cameraBinding;
-    // no flags
-    descSetLayoutInfo.flags = 0;
+    vkCreateDescriptorSetLayout(_device, &setinfo, nullptr, &_globalSetLayout);
 
-    vkCreateDescriptorSetLayout(_device, &descSetLayoutInfo, nullptr, &_globalSetLayout);
-    _mainDeletionQueue.push_function([&] {
-        vkDestroyDescriptorSetLayout(_device, _globalSetLayout, nullptr);
-    });
+    const size_t sceneParamBufferSize = FRAME_OVERLAP * pad_uniform_buffer(sizeof(GPUSceneData));
+    _sceneParamsBuffer = create_buffer(sceneParamBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 
     for (int i = 0; i < FRAME_OVERLAP; i++) {
         _frames[i].cameraBuffer = create_buffer(sizeof(GPUCameraData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
@@ -1078,5 +1092,33 @@ void VulkanEngine::init_descriptors()
         setWrite.dstSet = _frames[i].globalDescriptorSet;
 
         vkUpdateDescriptorSets(_device, 1, &setWrite, 0, nullptr);
+
+        VkDescriptorBufferInfo cameraInfo;
+        cameraInfo.buffer = _frames[i].cameraBuffer._buffer;
+        cameraInfo.offset = 0;
+        cameraInfo.range = sizeof(GPUCameraData);
+
+        VkDescriptorBufferInfo sceneInfo;
+        sceneInfo.buffer = _sceneParamsBuffer._buffer;
+        sceneInfo.offset = 0;
+        sceneInfo.range = sizeof(GPUSceneData);
+
+        VkWriteDescriptorSet cameraWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _frames[i].globalDescriptorSet, &cameraInfo, 0);
+        VkWriteDescriptorSet sceneWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, _frames[i].globalDescriptorSet, &sceneInfo, 1);
+
+        VkWriteDescriptorSet setWrites[] = { cameraWrite, sceneWrite };
+
+        vkUpdateDescriptorSets(_device, 2, setWrites, 0, nullptr);
     }
 };
+
+size_t VulkanEngine::pad_uniform_buffer(size_t originalSize)
+{
+    // Calculate required alignment based on minimum device offset alignment
+    size_t minUboAlignment = _deviceProperties.limits.minUniformBufferOffsetAlignment;
+    size_t alignedSize = originalSize;
+    if (minUboAlignment > 0) {
+        alignedSize = (alignedSize + minUboAlignment - 1) & ~(minUboAlignment - 1);
+    }
+    return alignedSize;
+}

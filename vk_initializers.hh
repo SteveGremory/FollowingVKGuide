@@ -18,4 +18,6 @@ VkPipelineLayoutCreateInfo pipeline_layout_create_info();
 VkImageCreateInfo create_image_info(VkFormat format, VkImageUsageFlags flags, VkExtent3D extent, VkSampleCountFlagBits sampleCount);
 VkImageViewCreateInfo create_image_view_info(VkFormat format, VkImage image, VkImageAspectFlags flags);
 VkPipelineDepthStencilStateCreateInfo depth_stencil_create_info(bool bDepthTest, bool bDepthWrite, VkCompareOp compareOp);
+VkDescriptorSetLayoutBinding descriptorset_layout_binding(VkDescriptorType type, VkShaderStageFlags stageFlags, uint32_t binding);
+VkWriteDescriptorSet write_descriptor_buffer(VkDescriptorType type, VkDescriptorSet dstSet, VkDescriptorBufferInfo* bufferInfo, uint32_t binding);
 }

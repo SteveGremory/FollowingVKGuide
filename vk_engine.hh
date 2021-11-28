@@ -70,6 +70,15 @@ struct GPUCameraData {
     glm::mat4 rotation;
 };
 
+struct GPUSceneData {
+    glm::vec4
+        fogColor, // w is for exponent
+        fogDistances, // x for min y for max; z and w aren't being used
+        ambientColor,
+        sunlightDirection, // w for sun power
+        sunlightColor;
+};
+
 struct FrameData {
     VkSemaphore _presentSemaphore, _renderSemaphore;
     VkFence _fence;
@@ -142,6 +151,12 @@ public:
     VkDescriptorPool _descriptorPool;
     // Descriptor set layout
     VkDescriptorSetLayout _globalSetLayout;
+    // Physical Device Properties
+    VkPhysicalDeviceProperties _deviceProperties;
+
+    GPUSceneData _sceneParams;
+    AllocatedBuffer _sceneParamsBuffer;
+
     // Objects to be rendered
     std::vector<RenderObject>
         _renderables;
@@ -202,10 +217,6 @@ private:
     void init_scene();
     // Init descriptors
     void init_descriptors();
-    // Recreate Swapchain (for resizing)
-    void recreate_swapchain();
-    // Cleanup Swapchain before recreation
-    void cleanupSwapChain();
 
     // load the shader module from the filepath
     bool load_shader_module(const char* filepath, VkShaderModule* outshaderModule);
@@ -217,4 +228,6 @@ private:
     AllocatedBuffer create_buffer(size_t allocsize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
     // upload the meshes to the pipeline
     void upload_mesh(Mesh& mesh);
+    // For padding the uniform buffer to make it the right size.
+    size_t pad_uniform_buffer(size_t originalSize);
 };
