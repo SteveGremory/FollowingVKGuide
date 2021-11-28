@@ -955,8 +955,9 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
         if (object.material != lastMaterial) {
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, object.material->pipeline);
             lastMaterial = object.material;
-            // Bind the desc set when changing the pipeline
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, object.material->pipelineLayout, 0, 1, &get_current_frame().globalDescriptorSet, 0, nullptr);
+
+            uint32_t uniform_offset = pad_uniform_buffer(sizeof(GPUSceneData)) * frameIndex;
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, object.material->pipelineLayout, 0, 1, &get_current_frame().globalDescriptorSet, 1, &uniform_offset);
         }
 
         glm::mat4 model = object.transformMatrix;
@@ -973,14 +974,6 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
             VkDeviceSize offset = 0;
             vkCmdBindVertexBuffers(cmd, 0, 1, &object.mesh->_vertexBuffer._buffer, &offset);
             lastMesh = object.mesh;
-        }
-
-        if (object.material != lastMaterial) {
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, object.material->pipeline);
-            lastMaterial = object.material;
-
-            uint32_t uniform_offset = pad_uniform_buffer(sizeof(GPUSceneData)) * frameIndex;
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, object.material->pipelineLayout, 0, 1, &get_current_frame().globalDescriptorSet, 1, &uniform_offset);
         }
 
         // btw 1 there means that we need 1 instance of that draw call
@@ -1041,9 +1034,9 @@ void VulkanEngine::init_descriptors()
     vkCreateDescriptorPool(_device, &descPoolInfo, nullptr, &_descriptorPool);
 
     //binding for camera data at 0
-    VkDescriptorSetLayoutBinding cameraBind = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, VK_SHADER_STAGE_VERTEX_BIT, 0);
+    VkDescriptorSetLayoutBinding cameraBind = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 0);
     //binding for scene data at 1
-    VkDescriptorSetLayoutBinding sceneBind = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 1);
+    VkDescriptorSetLayoutBinding sceneBind = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 1);
 
     VkDescriptorSetLayoutBinding bindings[] = { cameraBind, sceneBind };
 
@@ -1073,25 +1066,6 @@ void VulkanEngine::init_descriptors()
         allocInfo.pSetLayouts = &_globalSetLayout;
 
         vkAllocateDescriptorSets(_device, &allocInfo, &_frames[i].globalDescriptorSet);
-
-        // Info about the buffer we want to point at in the descriptor
-        VkDescriptorBufferInfo bufferInfo {};
-        bufferInfo.buffer = _frames[i].cameraBuffer._buffer;
-        bufferInfo.offset = 0;
-        bufferInfo.range = sizeof(GPUCameraData);
-
-        VkWriteDescriptorSet setWrite {};
-        setWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        setWrite.pNext = nullptr;
-
-        setWrite.descriptorCount = 1;
-        setWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-
-        setWrite.pBufferInfo = &bufferInfo;
-        setWrite.dstBinding = 0;
-        setWrite.dstSet = _frames[i].globalDescriptorSet;
-
-        vkUpdateDescriptorSets(_device, 1, &setWrite, 0, nullptr);
 
         VkDescriptorBufferInfo cameraInfo;
         cameraInfo.buffer = _frames[i].cameraBuffer._buffer;
