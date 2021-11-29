@@ -9,6 +9,7 @@
 #include <SDL2/SDL_vulkan.h>
 
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/transform.hpp>
 
 #include "VkBootstrap.h"
@@ -18,6 +19,10 @@
 #include <backends/imgui_impl_sdl.h>
 #include <backends/imgui_impl_vulkan.h>
 #include <imgui.h>
+
+Uint64 NOW = SDL_GetPerformanceCounter();
+Uint64 LAST = 0;
+double deltaTime = 0;
 
 // TODO: Make function documentation better by specifying args and their purposes
 
@@ -202,7 +207,14 @@ void VulkanEngine::run()
 
     //main loop
     while (!bQuit) {
+
+        LAST = NOW;
+        NOW = SDL_GetPerformanceCounter();
+
+        deltaTime = (double)((NOW - LAST) * 1000 / (double)SDL_GetPerformanceFrequency());
         //Handle events on queue
+        const Uint8* keyboard_state_array = SDL_GetKeyboardState(NULL);
+
         while (SDL_PollEvent(&e) != 0) {
             //close the window when user alt-f4s or clicks the X button
             if (e.type == SDL_QUIT) {
@@ -214,27 +226,54 @@ void VulkanEngine::run()
             } else if (e.type == SDL_KEYDOWN) {
                 // Left-Right
                 if (e.key.keysym.sym == SDLK_a) {
-                    _camera_positions.x += 0.1f;
-                } else if (e.key.keysym.sym == SDLK_d) {
-                    _camera_positions.x -= 0.1f;
+                    _camera_positions.x += 0.01f * deltaTime;
                 }
+                if (e.key.keysym.sym == SDLK_d) {
+                    _camera_positions.x -= 0.01f * deltaTime;
+                }
+
                 // Front-Back
-                else if (e.key.keysym.sym == SDLK_w) {
-                    _camera_positions.z += 0.1f;
-                } else if (e.key.keysym.sym == SDLK_s) {
-                    _camera_positions.z -= 0.1f;
+                if (e.key.keysym.sym == SDLK_w) {
+                    _camera_positions.z += 0.01f * deltaTime;
                 }
+                if (e.key.keysym.sym == SDLK_s) {
+                    _camera_positions.z -= 0.01f * deltaTime;
+                }
+
                 // Up-Down
-                else if (e.key.keysym.sym == SDLK_q) {
-                    _camera_positions.y += 0.1f;
-                } else if (e.key.keysym.sym == SDLK_e) {
-                    _camera_positions.y -= 0.1f;
+                if (e.key.keysym.sym == SDLK_q) {
+                    _camera_positions.y += 0.01f * deltaTime;
                 }
+                if (e.key.keysym.sym == SDLK_e) {
+                    _camera_positions.y -= 0.01f * deltaTime;
+                }
+
+                if (keyboard_state_array[SDL_SCANCODE_W] && keyboard_state_array[SDL_SCANCODE_A]) {
+                    _camera_positions.x += 0.01f * deltaTime;
+                    _camera_positions.z += 0.01f * deltaTime;
+                }
+
+                if (keyboard_state_array[SDL_SCANCODE_W] && keyboard_state_array[SDL_SCANCODE_D]) {
+                    _camera_positions.x -= 0.01f * deltaTime;
+                    _camera_positions.z += 0.01f * deltaTime;
+                }
+
+                if (keyboard_state_array[SDL_SCANCODE_S] && keyboard_state_array[SDL_SCANCODE_A]) {
+                    _camera_positions.x += 0.01f * deltaTime;
+                    _camera_positions.z -= 0.01f * deltaTime;
+                }
+
+                if (keyboard_state_array[SDL_SCANCODE_S] && keyboard_state_array[SDL_SCANCODE_D]) {
+                    _camera_positions.x -= 0.01f * deltaTime;
+                    _camera_positions.z -= 0.01f * deltaTime;
+                }
+
                 // Rotate right-left
-                else if (e.key.keysym.sym == SDLK_x) {
-                    _rotation += 0.1f;
-                } else if (e.key.keysym.sym == SDLK_z) {
-                    _rotation -= 0.1f;
+                if (e.key.keysym.sym == SDLK_x) {
+                    _rotation += 0.01f * deltaTime;
+                }
+                if (e.key.keysym.sym == SDLK_z) {
+                    _rotation -= 0.01f * deltaTime;
                 }
             }
         }
@@ -703,12 +742,12 @@ void VulkanEngine::init_pipelines()
     // VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST : normal triangle drawing
     // VK_PRIMITIVE_TOPOLOGY_POINT_LIST    : points
     // VK_PRIMITIVE_TOPOLOGY_LINE_LIST     : line-list
-    pipelineBuilder._inputAssembly = vkinit::input_assembly_create_info(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+    pipelineBuilder._inputAssembly = vkinit::input_assembly_create_info(VK_PRIMITIVE_TOPOLOGY_LINE_LIST);
 
     // Tell the rasterizer that we wanna fill the objects
     // Wireframe Mode: VK_POLYGON_MODE_LINE
     // Solid Mode: VK_POLYGON_MODE_FILL
-    pipelineBuilder._rasterizer = vkinit::rasterization_state_create_info(VK_POLYGON_MODE_FILL);
+    pipelineBuilder._rasterizer = vkinit::rasterization_state_create_info(VK_POLYGON_MODE_LINE);
 
     // MSAA
     pipelineBuilder._multisampling = vkinit::multisampling_state_create_info(_sampleCount);
@@ -908,7 +947,7 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
     // rotate only z axis
     glm::vec3 rotation_vector = glm::vec3(0, 1, 0);
     //todo: check out how glm::rotate actually works.
-    glm::mat4 rotation = glm::rotate(_rotation, rotation_vector);
+    glm::mat4 rotation = glm::rotate(glm::degrees(_rotation), rotation_vector);
 
     // allocate the uniform buffer
     GPUCameraData cameraData;
