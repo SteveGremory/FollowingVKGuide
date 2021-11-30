@@ -212,8 +212,61 @@ void VulkanEngine::run()
         NOW = SDL_GetPerformanceCounter();
 
         deltaTime = (double)((NOW - LAST) * 1000 / (double)SDL_GetPerformanceFrequency());
+        SDL_PumpEvents();
         //Handle events on queue
         const Uint8* keyboard_state_array = SDL_GetKeyboardState(NULL);
+
+        // Left-Right
+        if (keyboard_state_array[SDL_SCANCODE_A]) {
+            _camera_positions.x += 0.01f * deltaTime;
+        }
+        if (keyboard_state_array[SDL_SCANCODE_D]) {
+            _camera_positions.x -= 0.01f * deltaTime;
+        }
+
+        // Front-Back
+        if (keyboard_state_array[SDL_SCANCODE_W]) {
+            _camera_positions.z += 0.01f * deltaTime;
+        }
+        if (keyboard_state_array[SDL_SCANCODE_S]) {
+            _camera_positions.z -= 0.01f * deltaTime;
+        }
+
+        // Up-Down
+        if (keyboard_state_array[SDL_SCANCODE_Q]) {
+            _camera_positions.y += 0.01f * deltaTime;
+        }
+        if (keyboard_state_array[SDL_SCANCODE_E]) {
+            _camera_positions.y -= 0.01f * deltaTime;
+        }
+
+        if (keyboard_state_array[SDL_SCANCODE_W] && keyboard_state_array[SDL_SCANCODE_A]) {
+            _camera_positions.x += 0.001f * deltaTime;
+            _camera_positions.z += 0.001f * deltaTime;
+        }
+
+        if (keyboard_state_array[SDL_SCANCODE_W] && keyboard_state_array[SDL_SCANCODE_D]) {
+            _camera_positions.x -= 0.001f * deltaTime;
+            _camera_positions.z += 0.001f * deltaTime;
+        }
+
+        if (keyboard_state_array[SDL_SCANCODE_S] && keyboard_state_array[SDL_SCANCODE_A]) {
+            _camera_positions.x += 0.001f * deltaTime;
+            _camera_positions.z -= 0.001f * deltaTime;
+        }
+
+        if (keyboard_state_array[SDL_SCANCODE_S] && keyboard_state_array[SDL_SCANCODE_D]) {
+            _camera_positions.x -= 0.001f * deltaTime;
+            _camera_positions.z -= 0.001f * deltaTime;
+        }
+
+        // Rotate right-left
+        if (keyboard_state_array[SDL_SCANCODE_X]) {
+            _rotation += deltaTime;
+        }
+        if (keyboard_state_array[SDL_SCANCODE_Z]) {
+            _rotation -= deltaTime;
+        }
 
         while (SDL_PollEvent(&e) != 0) {
             //close the window when user alt-f4s or clicks the X button
@@ -222,58 +275,6 @@ void VulkanEngine::run()
             } else if (e.type == SDL_WINDOWEVENT) {
                 if (e.window.event == SDL_WINDOWEVENT_RESIZED) {
                     _wasResized = true;
-                }
-            } else if (e.type == SDL_KEYDOWN) {
-                // Left-Right
-                if (e.key.keysym.sym == SDLK_a) {
-                    _camera_positions.x += 0.01f * deltaTime;
-                }
-                if (e.key.keysym.sym == SDLK_d) {
-                    _camera_positions.x -= 0.01f * deltaTime;
-                }
-
-                // Front-Back
-                if (e.key.keysym.sym == SDLK_w) {
-                    _camera_positions.z += 0.01f * deltaTime;
-                }
-                if (e.key.keysym.sym == SDLK_s) {
-                    _camera_positions.z -= 0.01f * deltaTime;
-                }
-
-                // Up-Down
-                if (e.key.keysym.sym == SDLK_q) {
-                    _camera_positions.y += 0.01f * deltaTime;
-                }
-                if (e.key.keysym.sym == SDLK_e) {
-                    _camera_positions.y -= 0.01f * deltaTime;
-                }
-
-                if (keyboard_state_array[SDL_SCANCODE_W] && keyboard_state_array[SDL_SCANCODE_A]) {
-                    _camera_positions.x += 0.01f * deltaTime;
-                    _camera_positions.z += 0.01f * deltaTime;
-                }
-
-                if (keyboard_state_array[SDL_SCANCODE_W] && keyboard_state_array[SDL_SCANCODE_D]) {
-                    _camera_positions.x -= 0.01f * deltaTime;
-                    _camera_positions.z += 0.01f * deltaTime;
-                }
-
-                if (keyboard_state_array[SDL_SCANCODE_S] && keyboard_state_array[SDL_SCANCODE_A]) {
-                    _camera_positions.x += 0.01f * deltaTime;
-                    _camera_positions.z -= 0.01f * deltaTime;
-                }
-
-                if (keyboard_state_array[SDL_SCANCODE_S] && keyboard_state_array[SDL_SCANCODE_D]) {
-                    _camera_positions.x -= 0.01f * deltaTime;
-                    _camera_positions.z -= 0.01f * deltaTime;
-                }
-
-                // Rotate right-left
-                if (e.key.keysym.sym == SDLK_x) {
-                    _rotation += 0.01f * deltaTime;
-                }
-                if (e.key.keysym.sym == SDLK_z) {
-                    _rotation -= 0.01f * deltaTime;
                 }
             }
         }
@@ -742,12 +743,12 @@ void VulkanEngine::init_pipelines()
     // VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST : normal triangle drawing
     // VK_PRIMITIVE_TOPOLOGY_POINT_LIST    : points
     // VK_PRIMITIVE_TOPOLOGY_LINE_LIST     : line-list
-    pipelineBuilder._inputAssembly = vkinit::input_assembly_create_info(VK_PRIMITIVE_TOPOLOGY_LINE_LIST);
+    pipelineBuilder._inputAssembly = vkinit::input_assembly_create_info(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 
     // Tell the rasterizer that we wanna fill the objects
     // Wireframe Mode: VK_POLYGON_MODE_LINE
     // Solid Mode: VK_POLYGON_MODE_FILL
-    pipelineBuilder._rasterizer = vkinit::rasterization_state_create_info(VK_POLYGON_MODE_LINE);
+    pipelineBuilder._rasterizer = vkinit::rasterization_state_create_info(VK_POLYGON_MODE_FILL);
 
     // MSAA
     pipelineBuilder._multisampling = vkinit::multisampling_state_create_info(_sampleCount);
@@ -947,7 +948,7 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
     // rotate only z axis
     glm::vec3 rotation_vector = glm::vec3(0, 1, 0);
     //todo: check out how glm::rotate actually works.
-    glm::mat4 rotation = glm::rotate(glm::degrees(_rotation), rotation_vector);
+    glm::mat4 rotation = glm::rotate(glm::radians(_rotation), rotation_vector);
 
     // allocate the uniform buffer
     GPUCameraData cameraData;
