@@ -133,6 +133,8 @@ public:
 
     // this time suzanne moment fr
     Mesh _monkeyMesh;
+    // AudiMesh :dab:
+    Mesh _carMesh;
 
     // Depth buffer moment :dab:
     VkImageView _depthImageView;
@@ -179,13 +181,13 @@ public:
     //
     // Public Functions:
     //
-    //initializes everything in the engine
+    // initializes everything in the engine
     void init();
-    //shuts down the engine
+    // shuts down the engine
     void cleanup();
-    //draw loop
+    // draw loop
     void draw();
-    //run main loop
+    // run main loop
     void run();
     // Create material
     Material* create_material(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name);

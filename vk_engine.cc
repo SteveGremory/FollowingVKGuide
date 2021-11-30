@@ -27,10 +27,10 @@ double deltaTime = 0;
 // TODO: Make function documentation better by specifying args and their purposes
 
 /*
-    The descriptor set number 0 will be used for engine-global resources, and bound once per frame. 
-    The descriptor set number 1 will be used for per-pass resources, and bound once per pass. 
-    The descriptor set number 2 will be used for material resources, 
-    and the number 3 will be used for per-object resources. 
+    The descriptor set number 0 will be used for engine-global resources, and bound once per frame.
+    The descriptor set number 1 will be used for per-pass resources, and bound once per pass.
+    The descriptor set number 2 will be used for material resources,
+    and the number 3 will be used for per-object resources.
     This way, the inner render loops will only be binding descriptor sets 2 and 3, and performance will be high.
 */
 
@@ -70,7 +70,7 @@ void VulkanEngine::init()
     load_meshes();
     init_scene();
 
-    //everything went fine
+    // everything went fine
     _isInitialized = true;
 }
 
@@ -81,11 +81,11 @@ void VulkanEngine::draw()
     VK_CHECK(vkWaitForFences(_device, 1, &get_current_frame()._fence, true, 1000000000));
     VK_CHECK(vkResetFences(_device, 1, &get_current_frame()._fence));
 
-    //request image from the swapchain, one second timeout
+    // request image from the swapchain, one second timeout
     uint32_t swapchainImageIndex;
     auto result = vkAcquireNextImageKHR(_device, _swapchain, 1000000000, get_current_frame()._presentSemaphore, nullptr, &swapchainImageIndex);
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-        //recreate_swapchain();
+        // recreate_swapchain();
     }
     VK_CHECK(vkResetCommandBuffer(get_current_frame()._mainCommandBuffer, 0));
 
@@ -191,11 +191,11 @@ void VulkanEngine::draw()
     auto result_present = vkQueuePresentKHR(_graphicsQueue, &presentInfo);
     if (result_present == VK_ERROR_OUT_OF_DATE_KHR || result_present == VK_SUBOPTIMAL_KHR || _wasResized) {
         _wasResized = false;
-        //recreate_swapchain();
+        // recreate_swapchain();
         return;
     }
 
-    //increase the number of frames drawn
+    // increase the number of frames drawn
     _frameNumber++;
 }
 
@@ -205,7 +205,7 @@ void VulkanEngine::run()
     SDL_Event e;
     bool bQuit = false;
 
-    //main loop
+    // main loop
     while (!bQuit) {
 
         LAST = NOW;
@@ -213,7 +213,7 @@ void VulkanEngine::run()
 
         deltaTime = (double)((NOW - LAST) * 1000 / (double)SDL_GetPerformanceFrequency());
         SDL_PumpEvents();
-        //Handle events on queue
+        // Handle events on queue
         const Uint8* keyboard_state_array = SDL_GetKeyboardState(NULL);
 
         // Left-Right
@@ -262,14 +262,14 @@ void VulkanEngine::run()
 
         // Rotate right-left
         if (keyboard_state_array[SDL_SCANCODE_X]) {
-            _rotation += deltaTime;
+            _rotation += 0.01f * deltaTime;
         }
         if (keyboard_state_array[SDL_SCANCODE_Z]) {
-            _rotation -= deltaTime;
+            _rotation -= 0.01f * deltaTime;
         }
 
         while (SDL_PollEvent(&e) != 0) {
-            //close the window when user alt-f4s or clicks the X button
+            // close the window when user alt-f4s or clicks the X button
             if (e.type == SDL_QUIT) {
                 bQuit = true;
             } else if (e.type == SDL_WINDOWEVENT) {
@@ -337,7 +337,6 @@ void VulkanEngine::init_vulkan()
     std::cout << "The GPU has a minimum buffer alignment of: " << _deviceProperties.limits.minUniformBufferOffsetAlignment << std::endl;
 
     _sampleCount = get_max_usable_sample_count();
-
     _mainDeletionQueue.push_function([&]() {
         vmaDestroyAllocator(_allocator);
     });
@@ -353,23 +352,23 @@ VkSampleCountFlagBits VulkanEngine::get_max_usable_sample_count()
         return VK_SAMPLE_COUNT_64_BIT;
     } else if (counts & VK_SAMPLE_COUNT_32_BIT) {
         std::cout << "Max Sample Count Available: "
-                  << "VK_SAMPLE_COUNT_64_BIT" << std::endl;
+                  << "VK_SAMPLE_COUNT_32_BIT" << std::endl;
         return VK_SAMPLE_COUNT_32_BIT;
     } else if (counts & VK_SAMPLE_COUNT_16_BIT) {
         std::cout << "Max Sample Count Available: "
-                  << "VK_SAMPLE_COUNT_64_BIT" << std::endl;
+                  << "VK_SAMPLE_COUNT_16_BIT" << std::endl;
         return VK_SAMPLE_COUNT_16_BIT;
     } else if (counts & VK_SAMPLE_COUNT_8_BIT) {
         std::cout << "Max Sample Count Available: "
-                  << "VK_SAMPLE_COUNT_64_BIT" << std::endl;
+                  << "VK_SAMPLE_COUNT_8_BIT" << std::endl;
         return VK_SAMPLE_COUNT_8_BIT;
     } else if (counts & VK_SAMPLE_COUNT_4_BIT) {
         std::cout << "Max Sample Count Available: "
-                  << "VK_SAMPLE_COUNT_64_BIT" << std::endl;
+                  << "VK_SAMPLE_COUNT_4_BIT" << std::endl;
         return VK_SAMPLE_COUNT_4_BIT;
     } else if (counts & VK_SAMPLE_COUNT_2_BIT) {
         std::cout << "Max Sample Count Available: "
-                  << "VK_SAMPLE_COUNT_64_BIT" << std::endl;
+                  << "VK_SAMPLE_COUNT_2_BIT" << std::endl;
         return VK_SAMPLE_COUNT_2_BIT;
     }
     return VK_SAMPLE_COUNT_1_BIT;
@@ -380,7 +379,7 @@ void VulkanEngine::init_swapchain()
 {
     vkb::SwapchainBuilder swapchainBuilder { _chosen_GPU, _device, _surface };
     vkb::Swapchain vkbSwapchain = swapchainBuilder.use_default_format_selection()
-                                      .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
+                                      .set_desired_present_mode(VK_PRESENT_MODE_FIFO_RELAXED_KHR)
                                       .set_desired_extent(_windowExtent.width, _windowExtent.height)
                                       .build()
                                       .value();
@@ -484,9 +483,9 @@ void VulkanEngine::init_commands()
         -------------------------------------------------------------
         -> you can have multiple command buffers in one pool but they
             will be executed in sync, aka, one after the other
-        
+
         -> you can create multiple command pools on other threads
-        
+
         -> Once a command buffer has been submitted, it’s still “alive”,
             and being consumed by the GPU, at this point it is NOT safe to reset the command buffer yet.
             You need to make sure that the GPU has finished executing
@@ -574,7 +573,7 @@ void VulkanEngine::init_default_renderpass()
     subpass.pColorAttachments = &color_attachment_ref;
     subpass.pDepthStencilAttachment = &depth_attachment_ref;
     subpass.pResolveAttachments = &resolve_attachment_ref;
-    //array of 3 attachments, one for the color, and other for depth and one for MSAA
+    // array of 3 attachments, one for the color, and other for depth and one for MSAA
     VkAttachmentDescription attachments[3];
     attachments[0] = color_attachment;
     attachments[1] = resolve_attachment;
@@ -758,7 +757,7 @@ void VulkanEngine::init_pipelines()
 
     pipelineBuilder._depthStencilInfo = vkinit::depth_stencil_create_info(true, true, VK_COMPARE_OP_LESS_OR_EQUAL);
 
-    //clear the shader stages for the builder
+    // clear the shader stages for the builder
     pipelineBuilder._shaderStages.clear();
 
     VertexInputDescription vertexDescription = Vertex::get_vertex_input_desc();
@@ -802,15 +801,15 @@ void VulkanEngine::init_pipelines()
 
     create_material(_meshPipeline, _meshPipelineLayout, "defaultmaterial");
 
-    //destroy all shader modules, outside of the queue
+    // destroy all shader modules, outside of the queue
     vkDestroyShaderModule(_device, meshVertShader, nullptr);
     vkDestroyShaderModule(_device, colorMeshShader, nullptr);
 
     _mainDeletionQueue.push_function([=]() {
-        //destroy the 2 pipelines we have created
+        // destroy the 2 pipelines we have created
         vkDestroyPipeline(_device, _meshPipeline, nullptr);
 
-        //destroy the pipeline layout that they use
+        // destroy the pipeline layout that they use
         vkDestroyPipelineLayout(_device, _meshPipelineLayout, nullptr);
     });
 }
@@ -833,12 +832,16 @@ void VulkanEngine::load_meshes()
 
     // we don't care about the vertex normals
 
-    _monkeyMesh.load_from_obj("../models/audi.obj");
+    _carMesh.load_from_obj("../models/audi_single_object.obj");
+    _monkeyMesh.load_from_obj("../models/high_poly_suzanne.obj");
+
     upload_mesh(_triangleMesh);
     upload_mesh(_monkeyMesh);
+    upload_mesh(_carMesh);
 
     _meshes["monkey"] = _monkeyMesh;
     _meshes["triangle"] = _triangleMesh;
+    _meshes["car"] = _carMesh;
 }
 
 //  Helper for Loader (Meshes): Upload the given mesh to the GPU memory
@@ -907,18 +910,32 @@ void VulkanEngine::init_scene()
     monkey.material = get_material("defaultmaterial");
     monkey.transformMatrix = glm::mat4 { 1.0f };
 
+    glm::mat4 translation = glm::translate(glm::mat4 { 1.0f }, glm::vec3 { 0.0f, 2.0f, 0.0f });
+    glm::mat4 scale = glm::scale(glm::mat4 { 1.0f }, glm::vec3(0.5f, 0.5f, 0.5f));
+
+    monkey.transformMatrix = translation * scale;
     // yo me wanna render monke hoot hoot
     _renderables.push_back(monkey);
 
+    RenderObject car;
+    car.mesh = get_mesh("car");
+    car.material = get_material("defaultmaterial");
+    car.transformMatrix = glm::mat4 { 1.0f };
+
+    _renderables.push_back(car);
+
     // apparently we create a lotta triangles in a grid and place them around the monkee
     // idfk how
-    for (int x = -20; x <= 20; x++) {
-        for (int y = -20; y <= 20; y++) {
+    for (int x = -10; x <= 10; x++) {
+        for (int y = -10; y <= 10; y++) {
             RenderObject triangles;
             triangles.mesh = get_mesh("triangle");
             triangles.material = get_material("defaultmaterial");
 
             // tbh i don't understand what any of the GLM shit does
+            // well now i do, so the x and y are positions for the triangles
+            // and there are currently 80 triangles here
+            // aka 80 drawcalls + that 1 for the mesh (it's unified)
             glm::mat4 translation = glm::translate(glm::mat4 { 1.0f }, glm::vec3 { x, 0, y });
             glm::mat4 scale = glm::scale(glm::mat4 { 1.0f }, glm::vec3(0.2f, 0.2f, 0.2f));
 
@@ -928,6 +945,16 @@ void VulkanEngine::init_scene()
             _renderables.push_back(triangles);
         }
     }
+
+    std::sort(_renderables.begin(), _renderables.end(), [](RenderObject a, RenderObject b) {
+        if (a.material == b.material) {
+            return true;
+        }
+        if (a.mesh == b.mesh) {
+            return true;
+        }
+        return false;
+    });
 }
 
 //  Drawcall (Scene): Draw all the objects that are in provided to the provided command buffer
@@ -939,7 +966,7 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
     glm::mat4 view = glm::translate(glm::mat4 { 1.0f }, cameraPos);
 
     // camera projection
-    glm::mat4 projection = glm::perspective(glm::radians(70.0f), (float)_windowExtent.width / (float)_windowExtent.height, 0.1f, 200.0f);
+    glm::mat4 projection = glm::perspective(45.0f, (float)_windowExtent.width / (float)_windowExtent.height, 0.1f, 200.0f);
 
     // // make whatever this is a negative value, fuck knows why
     // // ohhh so i did this to fix the darn vulkan BS
@@ -947,8 +974,8 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
     projection[1][1] *= -1;
     // rotate only z axis
     glm::vec3 rotation_vector = glm::vec3(0, 1, 0);
-    //todo: check out how glm::rotate actually works.
-    glm::mat4 rotation = glm::rotate(glm::radians(_rotation), rotation_vector);
+    // todo: check out how glm::rotate actually works.
+    glm::mat4 rotation = glm::rotate(_rotation, rotation_vector);
 
     // allocate the uniform buffer
     GPUCameraData cameraData;
@@ -1073,9 +1100,9 @@ void VulkanEngine::init_descriptors()
 
     vkCreateDescriptorPool(_device, &descPoolInfo, nullptr, &_descriptorPool);
 
-    //binding for camera data at 0
+    // binding for camera data at 0
     VkDescriptorSetLayoutBinding cameraBind = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 0);
-    //binding for scene data at 1
+    // binding for scene data at 1
     VkDescriptorSetLayoutBinding sceneBind = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 1);
 
     VkDescriptorSetLayoutBinding bindings[] = { cameraBind, sceneBind };
