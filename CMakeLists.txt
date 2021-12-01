@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.14)
 project(VulkanGuide)
 
 ## Testing verified commits
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # For all the dependencies
 include(deps/deps.cmake)
