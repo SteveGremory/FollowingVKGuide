@@ -94,6 +94,11 @@ struct GPUObjectData
 	glm::mat4 modelMatrix;
 };
 
+struct UploadContext {
+	VkFence _uploadFence;
+	VkCommandPool _commandPool;
+};
+
 struct FrameData
 {
 	VkSemaphore _presentSemaphore, _renderSemaphore;
@@ -177,8 +182,13 @@ public:
 	// Physical Device Properties
 	VkPhysicalDeviceProperties _deviceProperties;
 
+	// GPU Scene Data and it's buffer (Desc Sets)
 	GPUSceneData _sceneParams;
 	AllocatedBuffer _sceneParamsBuffer;
+
+	// Upload context for writing to a shared buffer between the GPU and the CPU
+	//UploadContext _uploadContext;
+//	void immediate_submit(std::function<void(VkCommandBuffer cmd)&& function>);
 
 	// Objects to be rendered
 	std::vector<RenderObject>

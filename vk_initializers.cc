@@ -2,6 +2,7 @@
 #include <vk_initializers.hh>
 
 #include <iostream>
+#include <vulkan/vulkan_core.h>
 
 VkCommandPoolCreateInfo vkinit::command_pool_create_info(uint32_t queueFamilyIndex, VkCommandPoolCreateFlags flags)
 {
@@ -274,4 +275,14 @@ VkWriteDescriptorSet vkinit::write_descriptor_buffer(VkDescriptorType type, VkDe
     write.pBufferInfo = bufferInfo;
 
     return write;
+}
+
+VkFenceCreateInfo vkinit::fence_create_info(VkFenceCreateFlags flags) {
+    VkFenceCreateInfo fenceInfo {};
+	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	fenceInfo.pNext = nullptr;
+
+	// wait on it before using it on a GPU command for the first time
+	fenceInfo.flags = flags;
+    return fenceInfo;
 }
