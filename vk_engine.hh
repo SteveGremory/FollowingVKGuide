@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "VkBootstrap.h"
 #include "vk_mem_alloc.h"
 
 #include <deque>
@@ -32,13 +33,14 @@ struct DeletionQueue
 		deletors.push_back(function);
 	};
 
-	void flush()
+	bool flush()
 	{
 		for (auto it = deletors.rbegin(); it != deletors.rend(); it++)
 		{
 			(*it)(); // call the function???? bro c++ moment
 		}
 		deletors.clear();
+		return true;
 	}
 };
 
@@ -144,7 +146,8 @@ public:
 	std::vector<VkFramebuffer> _frameBuffers; // all the framebuffers that need to be rendered to the screen
 
 	// Deletion queue so that Vulkan Validation layers stop crying
-	DeletionQueue _mainDeletionQueue; // jk it's so that every acquired resource is freed
+	DeletionQueue _mainDeletionQueue; // jk it's so that every acquired resource is deleted.
+	DeletionQueue _swapchainDeletionQueue;
 
 	// VulkanMemoryAllocator
 	VmaAllocator _allocator;
@@ -186,6 +189,8 @@ public:
 	GPUSceneData _sceneParams;
 	AllocatedBuffer _sceneParamsBuffer;
 
+	vkb::Swapchain _vkbSwapchain;
+	VkSwapchainKHR _oldSwapChain;
 	// Upload context for writing to a shared buffer between the GPU and the CPU
 	//UploadContext _uploadContext;
 //	void immediate_submit(std::function<void(VkCommandBuffer cmd)&& function>);
@@ -235,7 +240,7 @@ private:
 	// Init low level vulkan stuff
 	void init_vulkan();
 	// Init the swapchain
-	void init_swapchain();
+	void init_swapchain(bool setOld);
 	// Init the commandbuffer
 	void init_commands();
 	// Init the default renderpass
@@ -263,4 +268,6 @@ private:
 	void upload_mesh(Mesh& mesh);
 	// For padding the uniform buffer to make it the right size.
 	size_t pad_uniform_buffer(size_t originalSize);
+	// Recreate Swapchain
+	void recreate_swapchain();
 };
