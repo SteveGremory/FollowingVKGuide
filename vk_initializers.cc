@@ -286,3 +286,22 @@ VkFenceCreateInfo vkinit::fence_create_info(VkFenceCreateFlags flags) {
 	fenceInfo.flags = flags;
     return fenceInfo;
 }
+
+VkCommandBufferBeginInfo vkinit::command_buffer_begin_info(VkCommandBufferUsageFlags usage) {
+    VkCommandBufferBeginInfo cmdBufferInfo {};
+    cmdBufferInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    cmdBufferInfo.pNext = nullptr;
+    cmdBufferInfo.flags = usage;
+    cmdBufferInfo.pInheritanceInfo = nullptr;
+    return cmdBufferInfo;
+}
+
+VkSubmitInfo vkinit::sumbit_info(VkCommandBuffer* cmd) {
+	VkSubmitInfo submitInfo {};
+	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submitInfo.pNext = nullptr;
+
+	submitInfo.commandBufferCount = 1;
+	submitInfo.pCommandBuffers    = cmd;
+    return submitInfo;
+}

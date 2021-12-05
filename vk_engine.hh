@@ -192,8 +192,7 @@ public:
 	vkb::Swapchain _vkbSwapchain;
 	VkSwapchainKHR _oldSwapChain;
 	// Upload context for writing to a shared buffer between the GPU and the CPU
-	//UploadContext _uploadContext;
-//	void immediate_submit(std::function<void(VkCommandBuffer cmd)&& function>);
+	UploadContext _uploadContext;
 
 	// Objects to be rendered
 	std::vector<RenderObject>
@@ -213,7 +212,7 @@ public:
 
 	glm::vec3 _camera_positions;
 	float _rotation = 0.0f;
-
+	double _fps = 0.0f;
 	//
 	// Public Functions:
 	//
@@ -235,6 +234,8 @@ public:
 	void draw_objects(VkCommandBuffer cmd, RenderObject* first, int count);
 	// Getter for the frame currenting getting rendered.
 	FrameData& get_current_frame();
+	// Immediately create and submit a command buffer
+	void immediate_submit(std::function<void(VkCommandBuffer cmd)>&& function);
 
 private:
 	// Init low level vulkan stuff
@@ -255,9 +256,10 @@ private:
 	void init_scene();
 	// Init descriptors
 	void init_descriptors();
-
 	// load the shader module from the filepath
 	bool load_shader_module(const char* filepath, VkShaderModule* outshaderModule);
+	// Init ImGUI
+	void init_imgui();
 	// Get the max sample count available
 	VkSampleCountFlagBits get_max_usable_sample_count();
 	// get them models
