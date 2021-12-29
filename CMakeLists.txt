@@ -17,15 +17,18 @@ set(SOURCES
     source/ui/engine_ui.cc
     source/engine/mesh/mesh.cc
     source/engine/vulkan/engine.cc
+    source/engine/textures/textures.cc
     source/engine/initializers/initializers.cc
+
 )
 
 add_executable (Main ${SOURCES})
 target_include_directories(Main PUBLIC
     source/engine/mesh
     source/engine/vulkan
-    source/engine/initializers
     source/engine/common
+    source/engine/textures
+    source/engine/initializers
 )
 
 # Use clang and lincxx

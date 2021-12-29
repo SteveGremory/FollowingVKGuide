@@ -16,4 +16,5 @@ set(DEPS_INCLUDE_DIRS
     ${CMAKE_SOURCE_DIR}/deps/tinyobjloader
     ${CMAKE_SOURCE_DIR}/deps/glm
     ${CMAKE_SOURCE_DIR}/deps/imgui
+    ${CMAKE_SOURCE_DIR}/deps/stb
 )

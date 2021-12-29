@@ -3,18 +3,32 @@
 
 #pragma once
 
+#include "imgui_internal.h"
+#include <backends/imgui_impl_sdl.h>
+#include <backends/imgui_impl_vulkan.h>
+#include <imgui.h>
+
 #include "VkBootstrap.h"
 #include "vk_mem_alloc.h"
 
 #include "mesh.hh"
 #include "types.hh"
+
 #include <deque>
 #include <functional>
 #include <glm/glm.hpp>
 #include <iostream>
 #include <unordered_map>
 #include <vector>
-#include <vulkan/vulkan_core.h>
+
+#define VK_CHECK(x)                                                                 \
+        do {                                                                        \
+                VkResult err = x;                                                   \
+                if (err) {                                                          \
+                        std::cout << "Detected Vulkan error: " << err << std::endl; \
+                        abort();                                                    \
+                }                                                                   \
+        } while (0)
 
 constexpr unsigned int FRAME_OVERLAP = 2;
 
@@ -211,22 +225,43 @@ class VulkanEngine {
         void init();
         // shuts down the engine
         void cleanup();
+
         // draw loop
         void draw();
-        // run main loop
-        void run();
-        // Create material
-        Material* create_material(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name);
-        // Get the material from the hashmap, returns nullptr if it isn't found.
-        Material* get_material(const std::string& name);
-        // Get mesh; returns nullptr if the material isn't found.
-        Mesh* get_mesh(const std::string& name);
+        // Draw ImGUI UI
+        void draw_stats();
         // Draw objects
         void draw_objects(VkCommandBuffer cmd, RenderObject* first, int count);
         // Getter for the frame currenting getting rendered.
         FrameData& get_current_frame();
         // Immediately create and submit a command buffer
         void immediate_submit(std::function<void(VkCommandBuffer cmd)>&& function);
+
+        // run main loop
+        void run();
+
+        // load the shader module from the filepath
+        bool load_shader_module(const char* filepath, VkShaderModule* outshaderModule);
+        // get them models
+        void load_meshes();
+        // upload the meshes to the pipeline
+        void upload_mesh(Mesh& mesh);
+
+        // Create material
+        Material* create_material(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name);
+        // Get the material from the hashmap, returns nullptr if it isn't found.
+        Material* get_material(const std::string& name);
+        // Get mesh; returns nullptr if the material isn't found.
+        Mesh* get_mesh(const std::string& name);
+        // Create a (general) buffer
+        AllocatedBuffer create_buffer(size_t allocsize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
+
+        // Get the max sample count available
+        VkSampleCountFlagBits get_max_usable_sample_count();
+        // For padding the uniform buffer to make it the right size.
+        size_t pad_uniform_buffer(size_t originalSize);
+        // Recreate Swapchain
+        void recreate_swapchain();
 
     private:
         // Init low level vulkan stuff
@@ -247,20 +282,6 @@ class VulkanEngine {
         void init_scene();
         // Init descriptors
         void init_descriptors();
-        // load the shader module from the filepath
-        bool load_shader_module(const char* filepath, VkShaderModule* outshaderModule);
         // Init ImGUI
         void init_imgui();
-        // Get the max sample count available
-        VkSampleCountFlagBits get_max_usable_sample_count();
-        // get them models
-        void load_meshes();
-        // Create a (general) buffer
-        AllocatedBuffer create_buffer(size_t allocsize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
-        // upload the meshes to the pipeline
-        void upload_mesh(Mesh& mesh);
-        // For padding the uniform buffer to make it the right size.
-        size_t pad_uniform_buffer(size_t originalSize);
-        // Recreate Swapchain
-        void recreate_swapchain();
 };
