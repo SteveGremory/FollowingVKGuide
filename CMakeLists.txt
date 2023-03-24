@@ -3,7 +3,7 @@ project(VulkanGuide)
 
 ## Testing verified commits
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
+set (CMAKE_CXX_STANDARD 20)
 # For all the dependencies
 include(deps/deps.cmake)
 # For compiling shaders

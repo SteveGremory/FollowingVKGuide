@@ -8,7 +8,7 @@ void main() {
         vec3(-0.5, 0.5, 0.0f)
     );
 
-    	//const array of colors for the triangle
+    //const array of colors for the triangle
 	const vec3 colors[3] = vec3[3](
 		vec3(1.0f, 0.0f, 0.0f), //red
 		vec3(0.0f, 1.0f, 0.0f), //green
